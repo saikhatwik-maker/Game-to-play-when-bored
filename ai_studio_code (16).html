@@ -1,0 +1,2286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>3D Table Tennis — ITTF World Championship Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800;900&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:          #030712;
+    --panel:       rgba(11, 18, 36, 0.90);
+    --panel-card:  rgba(17, 26, 51, 0.80);
+    --panel-border:rgba(255, 255, 255, 0.14);
+    --player:      #ff6426;
+    --player-glow: rgba(255, 100, 38, 0.45);
+    --ai:          #00d2ff;
+    --ai-glow:     rgba(0, 210, 255, 0.45);
+    --gold:        #f59e0b;
+    --emerald:     #10b981;
+    --ink:         #f8fafc;
+    --ink-dim:     #94a3b8;
+    --fever:       #f43f5e;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html, body{
+    width:100%; height:100%;
+    background:var(--bg);
+    overflow:hidden;
+    font-family:'Inter', system-ui, -apple-system, sans-serif;
+    user-select:none; -webkit-user-select:none;
+    touch-action:none; overscroll-behavior:none;
+  }
+  #game{
+    position:fixed; inset:0; width:100%; height:100%;
+    cursor:crosshair; display:block;
+  }
+
+  /* ---------- STADIUM BROADCAST HUD ---------- */
+  #hud{
+    position:fixed; top:0; left:0; right:0;
+    display:flex; flex-direction:column; align-items:center;
+    padding-top:10px; pointer-events:none; z-index:10;
+  }
+  #scoreboard{
+    display:flex; align-items:center; gap:16px;
+    background:var(--panel); border:1.5px solid var(--panel-border);
+    border-radius:24px; padding:4px 22px; backdrop-filter:blur(16px);
+    box-shadow:0 12px 36px rgba(0,0,0,0.65);
+    transition:all 0.25s ease;
+  }
+  .score-box{ display:flex; align-items:center; gap:10px; }
+  .score-label{
+    font-family:'Orbitron', sans-serif; font-size:10px; font-weight:900;
+    letter-spacing:1.5px;
+  }
+  .score-box.player .score-label{ color:var(--player); }
+  .score-box.ai .score-label{ color:var(--ai); }
+  .score-val{
+    font-family:'Orbitron', sans-serif; font-weight:900;
+    font-size:clamp(28px, 5vw, 38px); line-height:1; min-width:34px; text-align:center;
+    color:var(--ink);
+  }
+  .score-box.player .score-val{ color:var(--player); text-shadow:0 0 20px var(--player-glow); }
+  .score-box.ai .score-val{ color:var(--ai); text-shadow:0 0 20px var(--ai-glow); }
+  #divider{ color:var(--ink-dim); font-family:'Orbitron', sans-serif; font-size:18px; opacity:0.35; }
+
+  #scoreboard.match-point{
+    border-color:var(--gold);
+    animation:mpPulse 1s ease-in-out infinite alternate;
+  }
+  @keyframes mpPulse{
+    from{ box-shadow:0 12px 36px rgba(0,0,0,0.65), 0 0 10px rgba(245,158,11,0.3); }
+    to{ box-shadow:0 12px 36px rgba(0,0,0,0.65), 0 0 32px rgba(245,158,11,0.85); }
+  }
+
+  #subRow{
+    margin-top:6px; display:flex; align-items:center; gap:8px;
+    font-family:'Orbitron', sans-serif; font-size:9px; letter-spacing:1.2px;
+    color:var(--ink-dim); background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:20px; padding:3px 14px; text-transform:uppercase;
+    backdrop-filter:blur(10px);
+  }
+  #subRow .dot{ opacity:0.35; }
+  #subRow b{ color:var(--ink); font-weight:700; }
+  #serveWho{ color:var(--player); font-weight:900; }
+
+  #feverContainer{
+    margin-top:5px; width:min(240px, 60vw); height:4px;
+    background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden;
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  #feverFill{
+    height:100%; width:0%;
+    background:linear-gradient(90deg, #00d2ff, #ff6426, #f43f5e);
+    transition:width 0.2s ease;
+  }
+  #rallyBadge{
+    position:fixed; top:90px; font-family:'Orbitron', sans-serif; font-weight:900; font-size:11px;
+    letter-spacing:1.8px; color:#00d2ff; background:rgba(11,18,36,0.92); border:1px solid rgba(0,210,255,0.4);
+    border-radius:20px; padding:4px 16px; pointer-events:none; z-index:10; opacity:0;
+    transition:all 0.2s ease; transform:scale(0.88);
+  }
+  #rallyBadge.visible{ opacity:1; transform:scale(1); }
+  #rallyBadge.fever{ color:#ff4d8d; border-color:#f43f5e; box-shadow:0 0 20px rgba(244,63,94,0.5); }
+
+  /* TELEMETRY READOUT */
+  #telemetry{
+    position:fixed; bottom:14px; right:14px;
+    background:var(--panel); border:1px solid var(--panel-border);
+    border-radius:12px; padding:6px 14px; font-family:'Orbitron', sans-serif;
+    font-size:9px; color:var(--ink-dim); backdrop-filter:blur(10px);
+    display:flex; flex-direction:column; gap:2px; pointer-events:none; z-index:10;
+  }
+  #telemetry span{ color:var(--ink); font-weight:800; }
+
+  /* TOP ACTION BUTTONS */
+  #topControls{ position:fixed; top:12px; right:12px; z-index:15; display:flex; gap:6px; }
+  .icon-btn{
+    width:38px; height:38px; border-radius:50%;
+    background:var(--panel); border:1px solid var(--panel-border); color:var(--ink);
+    font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s ease; backdrop-filter:blur(10px);
+  }
+  .icon-btn:hover{ transform:scale(1.08); background:rgba(255,255,255,0.16); }
+  .icon-btn:active{ transform:scale(0.92); }
+
+  /* POPUP NOTIFICATIONS */
+  #banner{
+    position:fixed; top:130px; left:50%; transform:translate(-50%,-10px) scale(0.95);
+    font-family:'Orbitron', sans-serif; font-weight:900; font-size:15px;
+    letter-spacing:1.8px; color:var(--ink);
+    background:var(--panel); border:1.5px solid var(--panel-border); border-radius:14px;
+    padding:8px 24px; opacity:0; pointer-events:none; z-index:11; text-align:center;
+    box-shadow:0 12px 36px rgba(0,0,0,0.7);
+  }
+  #banner.show{ animation:bannerPop 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+  #banner.smash{ color:#fde047; border-color:#eab308; text-shadow:0 0 24px rgba(250,204,21,0.85); }
+  #banner.spin{ color:#c084fc; border-color:#a855f7; text-shadow:0 0 20px rgba(192,132,252,0.8); }
+  #banner.edge{ color:#34d399; border-color:#10b981; text-shadow:0 0 20px rgba(52,211,153,0.8); }
+  @keyframes bannerPop{
+    0%{ opacity:0; transform:translate(-50%,-10px) scale(0.90); }
+    15%{ opacity:1; transform:translate(-50%,0) scale(1.05); }
+    30%{ transform:translate(-50%,0) scale(1); }
+    80%{ opacity:1; transform:translate(-50%,0) scale(1); }
+    100%{ opacity:0; transform:translate(-50%,-8px) scale(0.98); }
+  }
+
+  /* SIDE EDGE BALL BEACON / TRACKER */
+  #sideBallBeacon{
+    position:fixed; width:32px; height:32px; border-radius:50%;
+    background:radial-gradient(circle, #fde047 30%, rgba(253,224,71,0.2) 70%);
+    box-shadow:0 0 16px #fde047; pointer-events:none; z-index:9;
+    display:none; transform:translate(-50%,-50%);
+  }
+
+  /* ---------- STREAMLINED ZERO-GRIND QUICK SERVE DOCK ---------- */
+  #quickServeDock{
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    z-index:12; pointer-events:auto;
+  }
+  #quickServeDock.hidden{ display:none !important; }
+
+  #serveButtonRow{
+    display:flex; align-items:center; gap:8px;
+    background:var(--panel); border:1.5px solid var(--panel-border);
+    border-radius:24px; padding:6px 14px; backdrop-filter:blur(16px);
+    box-shadow:0 12px 32px rgba(0,0,0,0.65);
+  }
+  .serve-mode-btn{
+    font-family:'Orbitron', sans-serif; font-size:10px; font-weight:800;
+    color:var(--ink-dim); background:rgba(255,255,255,0.06); border:1px solid transparent;
+    border-radius:14px; padding:8px 14px; cursor:pointer; transition:all 0.15s ease;
+    display:flex; align-items:center; gap:5px; white-space:nowrap;
+  }
+  .serve-mode-btn:hover{ color:var(--ink); background:rgba(255,255,255,0.12); transform:translateY(-2px); }
+  .serve-mode-btn.active{
+    color:#fff; background:rgba(255,100,38,0.28); border-color:var(--player);
+    box-shadow:0 0 16px var(--player-glow);
+  }
+
+  #serveActionBtn{
+    font-family:'Orbitron', sans-serif; font-weight:900; font-size:11px; letter-spacing:1.2px;
+    color:#fff; background:linear-gradient(135deg, #ff6426, #ea580c);
+    border:1px solid rgba(255,255,255,0.4); border-radius:30px;
+    padding:9px 22px; text-transform:uppercase; cursor:pointer;
+    box-shadow:0 0 22px var(--player-glow); white-space:nowrap;
+    transition:all 0.15s ease;
+  }
+  #serveActionBtn:hover{ transform:scale(1.04); filter:brightness(1.1); }
+  #serveActionBtn:active{ transform:scale(0.96); }
+
+  #hint{
+    position:fixed; left:14px; bottom:14px; z-index:8;
+    font-size:10px; color:var(--ink-dim); max-width:44vw;
+    background:var(--panel); border:1px solid var(--panel-border);
+    padding:5px 12px; border-radius:8px; pointer-events:none; backdrop-filter:blur(8px);
+  }
+
+  /* ---------- MODERN PRO DASHBOARD / OVERLAY ---------- */
+  #overlay{
+    position:fixed; inset:0; z-index:30; cursor:default;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:radial-gradient(ellipse at 50% 30%, rgba(13,22,46,0.96), rgba(2,4,10,0.98));
+    padding:16px 12px; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  }
+  #overlay.hidden{ display:none !important; }
+
+  #dashContainer{
+    max-width:840px; width:100%; display:flex; flex-direction:column;
+    background:var(--panel); border:1.5px solid var(--panel-border);
+    border-radius:24px; box-shadow:0 24px 60px rgba(0,0,0,0.7);
+    overflow:hidden; backdrop-filter:blur(24px); max-height:min(94vh, 700px);
+  }
+
+  #dashHeader{
+    padding:14px 20px 10px; border-bottom:1px solid var(--panel-border);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  #dashTitle{
+    font-family:'Orbitron', sans-serif; font-size:clamp(16px, 3.2vw, 22px);
+    font-weight:900; letter-spacing:2px; color:var(--ink);
+  }
+  #dashTitle .accent{ color:var(--player); text-shadow:0 0 20px var(--player-glow); }
+
+  #dashNav{ display:flex; gap:4px; background:rgba(0,0,0,0.3); padding:3px; border-radius:12px; flex-wrap:wrap; }
+  .dash-tab{
+    font-family:'Orbitron', sans-serif; font-size:8.5px; font-weight:800; letter-spacing:1px;
+    color:var(--ink-dim); background:transparent; border:none; border-radius:8px;
+    padding:6px 11px; cursor:pointer; transition:all 0.15s ease;
+  }
+  .dash-tab.active{ color:#fff; background:rgba(255,100,38,0.3); border:1px solid rgba(255,100,38,0.6); }
+
+  #dashContent{
+    padding:14px 18px; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:10px;
+  }
+
+  /* LEVEL MAP STYLING */
+  .circuit-banner{
+    display:flex; justify-content:space-between; align-items:center;
+    background:linear-gradient(90deg, rgba(255,255,255,0.06), transparent);
+    padding:6px 12px; border-radius:10px; border-left:3px solid var(--player);
+    font-family:'Orbitron', sans-serif; font-size:9.5px; font-weight:800; letter-spacing:1px; color:var(--ink);
+    margin-top:6px;
+  }
+  .grid-levels{ display:grid; grid-template-columns:repeat(auto-fit, minmax(130px, 1fr)); gap:8px; }
+  
+  .level-card{
+    background:var(--panel-card); border:1px solid var(--panel-border);
+    border-radius:14px; padding:10px 8px; cursor:pointer; display:flex;
+    flex-direction:column; align-items:center; text-align:center; gap:3px;
+    transition:all 0.15s ease; position:relative;
+  }
+  .level-card:hover{ border-color:rgba(255,255,255,0.4); transform:translateY(-2px); }
+  .level-card.selected{ border-color:var(--player); box-shadow:0 0 20px var(--player-glow); background:rgba(255,100,38,0.16); }
+  .level-card.locked{ opacity:0.4; filter:grayscale(0.8); cursor:not-allowed; }
+  
+  .card-flag{ font-size:18px; line-height:1; margin-bottom:2px; }
+  .card-stars{ font-size:9px; color:var(--gold); font-weight:900; letter-spacing:1px; }
+
+  /* OPPONENT SCOUT PANEL */
+  #scoutPanel{
+    background:rgba(0,0,0,0.35); border:1px solid var(--panel-border);
+    border-radius:16px; padding:12px 16px; display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+  }
+  .scout-avatar{
+    width:56px; height:56px; border-radius:50%; border:2px solid var(--ai);
+    display:flex; align-items:center; justify-content:center; font-size:26px;
+    background:radial-gradient(circle, rgba(0,210,255,0.25), rgba(0,0,0,0.5));
+  }
+  .scout-info{ flex:1; min-width:180px; display:flex; flex-direction:column; gap:2px; text-align:left; }
+  .scout-name{ font-family:'Orbitron', sans-serif; font-size:13px; font-weight:900; color:var(--ink); }
+  .scout-title{ font-size:9px; color:var(--ai); font-weight:700; text-transform:uppercase; letter-spacing:0.5px; }
+  .scout-quote{ font-size:8.5px; color:var(--ink-dim); font-style:italic; margin-top:2px; }
+  .scout-stats{ display:flex; flex-direction:column; gap:3px; min-width:140px; }
+
+  .grid-blades{ display:grid; grid-template-columns:repeat(auto-fill, minmax(136px, 1fr)); gap:8px; }
+  .grid-modes{ display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px; }
+
+  .dash-card{
+    background:var(--panel-card); border:1px solid var(--panel-border);
+    border-radius:14px; padding:12px 10px; cursor:pointer; display:flex;
+    flex-direction:column; align-items:center; text-align:center; gap:4px;
+    transition:all 0.15s ease; position:relative;
+  }
+  .dash-card:hover{ border-color:rgba(255,255,255,0.4); transform:translateY(-2px); }
+  .dash-card.selected{ border-color:var(--player); box-shadow:0 0 20px var(--player-glow); background:rgba(255,100,38,0.15); }
+  .dash-card.locked{ opacity:0.4; filter:grayscale(0.8); cursor:not-allowed; }
+
+  .card-blade-swatch{ width:24px; height:24px; border-radius:50%; border:2px solid rgba(255,255,255,0.3); margin-bottom:2px; }
+  .stat-row{ width:100%; display:flex; align-items:center; gap:5px; }
+  .stat-label{ font-size:8px; font-family:'Orbitron',sans-serif; color:var(--ink-dim); width:24px; text-align:left; }
+  .stat-bar{ flex:1; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; }
+  .stat-fill{ height:100%; background:var(--player); border-radius:2px; }
+
+  #dashFooter{
+    padding:12px 20px 14px; border-top:1px solid var(--panel-border);
+    display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.25);
+  }
+  .equipped-summary{ font-size:11px; color:var(--ink-dim); }
+  .equipped-summary b{ color:var(--ink); }
+
+  .btn{
+    font-family:'Orbitron', sans-serif; font-weight:900; font-size:11px; letter-spacing:1.5px;
+    color:var(--bg); background:var(--ink); border:none; border-radius:999px;
+    padding:12px 28px; text-transform:uppercase; cursor:pointer;
+    transition:all 0.15s ease;
+  }
+  .btn:active{ transform:scale(0.96); }
+  .btn.primary{ background:linear-gradient(135deg, #ff6426, #ea580c); color:#fff; box-shadow:0 0 22px var(--player-glow); }
+  .btn.secondary{ background:transparent; color:var(--ink); border:1px solid var(--panel-border); }
+
+  @media (max-width:540px){
+    #hint, #telemetry{ display:none; }
+    #subRow{ font-size:7.5px; padding:2px 8px; }
+    .dash-tab{ font-size:7.5px; padding:5px 7px; }
+    #dashContent{ padding:10px 8px; }
+    #scoutPanel{ flex-direction:column; align-items:flex-start; gap:8px; }
+    .serve-mode-btn{ font-size:8px; padding:6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+<div id="sideBallBeacon"></div>
+
+<!-- BROADCAST HUD -->
+<div id="hud">
+  <div id="scoreboard">
+    <div class="score-box player">
+      <span class="score-label">YOU</span>
+      <span id="scorePlayer" class="score-val">0</span>
+    </div>
+    <div id="divider">:</div>
+    <div class="score-box ai">
+      <span id="scoreAI" class="score-val">0</span>
+      <span id="opponentHUDName" class="score-label">AI</span>
+    </div>
+  </div>
+  <div id="subRow">
+    <span id="levelInfo">STAGE 1 · KENJI</span>
+    <span class="dot">•</span>
+    <b id="batInfo">CLASSIC RED</b>
+    <span class="dot">•</span>
+    <span>SERVE: <span id="serveWho">YOU</span></span>
+  </div>
+  <div id="feverContainer"><div id="feverFill"></div></div>
+  <div id="rallyBadge">RALLY 0</div>
+</div>
+
+<div id="telemetry">
+  <div>SPEED: <span id="telSpeed">0.0 km/h</span></div>
+  <div>SPIN: <span id="telSpin">0 RPM</span></div>
+</div>
+
+<div id="topControls">
+  <button id="soundBtn" class="icon-btn" title="Toggle Sound">🔊</button>
+  <button id="camBtn" class="icon-btn" title="Camera Presets">🎥</button>
+  <button id="menuBtn" class="icon-btn" title="Pause / Dashboard">☰</button>
+</div>
+
+<div id="banner"></div>
+
+<!-- ZERO-GRIND QUICK SERVE DOCK -->
+<div id="quickServeDock" class="hidden">
+  <div id="serveButtonRow">
+    <button class="serve-mode-btn active" data-archetype="0">⚡ TOPSPIN</button>
+    <button class="serve-mode-btn" data-archetype="1">🌀 BACKSPIN</button>
+    <button class="serve-mode-btn" data-archetype="2">🪃 PENDULUM</button>
+    <button class="serve-mode-btn" data-archetype="3">🪓 TOMAHAWK</button>
+    <button id="serveActionBtn">SERVE [SPACE]</button>
+  </div>
+</div>
+
+<div id="hint">Mouse / Finger controls paddle 1:1 · [Space] Serve · [Esc] Pause/Resume</div>
+
+<!-- AAA DASHBOARD MODAL -->
+<div id="overlay">
+  <div id="dashContainer">
+    <div id="dashHeader">
+      <div id="dashTitle">WORLD CHAMPIONSHIP <span class="accent">PRO</span></div>
+      <div id="dashNav">
+        <button class="dash-tab active" data-view="levels">WORLD CIRCUIT (12)</button>
+        <button class="dash-tab" data-view="modes">MODES</button>
+        <button class="dash-tab" data-view="blades">LOCKER ROOM</button>
+        <button class="dash-tab" data-view="arenas">ARENAS</button>
+      </div>
+    </div>
+    <div id="dashContent"></div>
+    <div id="dashFooter">
+      <div class="equipped-summary" id="equippedSummary">Ready for Match</div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn secondary" id="dashCloseBtn" style="display:none;" onclick="window.onCloseDash()">RESUME</button>
+        <button class="btn primary" id="dashStartBtn" onclick="window.onStartGame()">CHALLENGE STAGE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* =====================================================================
+   WORLD & ITTF SPECIFICATIONS
+   ===================================================================== */
+var TABLE_LENGTH    = 2.74;
+var TABLE_WIDTH     = 1.525;
+var TABLE_SURFACE_Y = 0.76;
+var TABLE_THICK     = 0.038;
+var NET_HEIGHT      = 0.1525;
+var NET_THICK       = 0.015;
+var BALL_RADIUS     = 0.022; // Slightly larger optic radius for crisp visibility
+
+var GRAVITY         = -9.81;
+var REST_TABLE      = 0.88;
+var MAGNUS_COEFF_Y  = 0.038;
+var MAGNUS_COEFF_X  = 0.046;
+
+var PLAYER_Z = TABLE_LENGTH/2 + 0.38;
+var AI_Z     = -(TABLE_LENGTH/2 + 0.38);
+
+var PADDLE_RADIUS   = 0.092;
+var BASE_HIT_RADIUS = 0.36;
+var PADDLE_Y_MIN    = TABLE_SURFACE_Y - 0.04;
+var PADDLE_Y_MAX    = TABLE_SURFACE_Y + 0.85;
+var PADDLE_Y_REST   = TABLE_SURFACE_Y + 0.28;
+var PADDLE_X_LIMIT  = TABLE_WIDTH/2 + 0.95;
+
+var WIN_SCORE = 11;
+
+/* =====================================================================
+   ARENAS & THEMES
+   ===================================================================== */
+var ARENAS = [
+  { name:'Tokyo Grand Dome',   floorColor:0x0a101f, tableColor:'#0c5196', fogColor:0x030712, accentColor:0x00d2ff, desc:'High-tech stadium with holographic sidelines.' },
+  { name:'Paris Grand Slam',   floorColor:0x1b110e, tableColor:'#0e6648', fogColor:0x0a0503, accentColor:0xff6426, desc:'Clay court ambiance with warm arena lighting.' },
+  { name:'London Classic',     floorColor:0x121418, tableColor:'#154675', fogColor:0x08090b, accentColor:0xf59e0b, desc:'Traditional oak parquet and gold floodlights.' },
+  { name:'Singapore Horizon',  floorColor:0x081520, tableColor:'#0b5c8f', fogColor:0x020a10, accentColor:0x34d399, desc:'Open sky-view skyscraper rooftop arena.' },
+  { name:'Neo Shanghai Arena', floorColor:0x18091d, tableColor:'#1c2b66', fogColor:0x0c0310, accentColor:0xf43f5e, desc:'Cyberpunk night arena with pulse audio reactive LEDs.' }
+];
+
+/* =====================================================================
+   12 EXPANDED WORLD CIRCUIT OPPONENTS
+   ===================================================================== */
+var LEVELS = [
+  // CIRCUIT 1: JUNIOR CIRCUIT
+  { id:1, name:'Kenji Sato',   country:'🇯🇵 JPN', title:'Rookie Prodigy',   circuit:'Circuit 1 · Junior Open', aiSpeed:2.4, aiError:0.048, aiPower:0.88, smashChance:0.04, spinSkill:0.30, preferredArchetype:0, color:0x38bdf8, avatar:'👦', quote:"Let's see if you have mastered the basics!" },
+  { id:2, name:'Lucas Dubois', country:'🇫🇷 FRA', title:'Drive Specialist', circuit:'Circuit 1 · Junior Open', aiSpeed:2.8, aiError:0.038, aiPower:0.94, smashChance:0.10, spinSkill:0.50, preferredArchetype:0, color:0x60a5fa, avatar:'👱‍♂️', quote:"My baseline topspin loops never miss." },
+  { id:3, name:'Elena Lind',   country:'🇸🇪 SWE', title:'Backhand Smasher', circuit:'Circuit 1 · Junior Open', aiSpeed:3.2, aiError:0.030, aiPower:1.00, smashChance:0.18, spinSkill:0.68, preferredArchetype:0, color:0x818cf8, avatar:'👩', quote:"Step back if you don't want to get smashed!" },
+
+  // CIRCUIT 2: NATIONAL PRO LEAGUE
+  { id:4, name:'Marco Rossi',  country:'🇮🇹 ITA', title:'The Chop Wall',    circuit:'Circuit 2 · National Pro', aiSpeed:3.6, aiError:0.024, aiPower:1.05, smashChance:0.24, spinSkill:0.86, preferredArchetype:1, color:0xa855f7, avatar:'🧔', quote:"Try attacking through my heavy under-spin!" },
+  { id:5, name:'Dmitri Becker',country:'🇩🇪 GER', title:'Power Looper',     circuit:'Circuit 2 · National Pro', aiSpeed:4.0, aiError:0.018, aiPower:1.10, smashChance:0.32, spinSkill:1.02, preferredArchetype:0, color:0xec4899, avatar:'👨‍🦰', quote:"Every return of mine is an offensive bullet." },
+  { id:6, name:'Wei Long',     country:'🇨🇳 CHN', title:'Banana Flick Ace', circuit:'Circuit 2 · National Pro', aiSpeed:4.4, aiError:0.012, aiPower:1.14, smashChance:0.40, spinSkill:1.18, preferredArchetype:2, color:0xf43f5e, avatar:'⚡', quote:"Speed and table-edge angles win every time." },
+
+  // CIRCUIT 3: CONTINENTAL CHAMPIONS
+  { id:7, name:'Siddharth Rao',country:'🇮🇳 IND', title:'Spin Sorcerer',    circuit:'Circuit 3 · Continental Cup', aiSpeed:4.7, aiError:0.008, aiPower:1.18, smashChance:0.46, spinSkill:1.35, preferredArchetype:2, color:0xf97316, avatar:'🧙‍♂️', quote:"You won't be able to read my reverse pendulum." },
+  { id:8, name:'Viktor Smirnov',country:'🇷🇺 RUS', title:'Titanium Aegis',  circuit:'Circuit 3 · Continental Cup', aiSpeed:5.0, aiError:0.005, aiPower:1.22, smashChance:0.52, spinSkill:1.48, preferredArchetype:3, color:0xeab308, avatar:'🛡️', quote:"A reinforced block on every single shot." },
+  { id:9, name:'Carlos Silva', country:'🇧🇷 BRA', title:'Samba Smasher',   circuit:'Circuit 3 · Continental Cup', aiSpeed:5.3, aiError:0.003, aiPower:1.26, smashChance:0.60, spinSkill:1.58, preferredArchetype:3, color:0x22c55e, avatar:'🔥', quote:"Explosive rhythm and relentless pressure!" },
+
+  // CIRCUIT 4: ITTF GRAND SLAM APEX
+  { id:10, name:'Tsubasa Ozora',country:'🇯🇵 JPN', title:'Quantum Master', circuit:'Circuit 4 · Grand Slam Finals', aiSpeed:5.6, aiError:0.001, aiPower:1.30, smashChance:0.66, spinSkill:1.70, preferredArchetype:2, color:0x06b6d4, avatar:'🥋', quote:"Move at the speed of thought." },
+  { id:11, name:'Sir Alexander',country:'🇬🇧 GBR', title:'Court Maestro',  circuit:'Circuit 4 · Grand Slam Finals', aiSpeed:5.8, aiError:0.0005, aiPower:1.34, smashChance:0.72, spinSkill:1.82, preferredArchetype:1, color:0x3b82f6, avatar:'👑', quote:"Precision is the only metric of true mastery." },
+  { id:12, name:'Master Zhang', country:'👑 WRLD', title:'Apex World Boss',circuit:'Circuit 4 · Grand Slam Finals', aiSpeed:6.1, aiError:0.000, aiPower:1.38, smashChance:0.80, spinSkill:1.98, preferredArchetype:3, color:0xff0055, avatar:'🐲', quote:"Welcome to the absolute summit of Table Tennis." }
+];
+
+var BATS = [
+  { name:'Classic Red',     power:1.00, spin:1.00, control:1.00, color:0xe63946, accent:'#ff6426', desc:'Standard tournament balanced rubber.' },
+  { name:'Soft Touch Wood', power:0.86, spin:0.95, control:1.45, color:0x8b5a2b, accent:'#d4a373', desc:'7-ply natural wood with immense ball control.' },
+  { name:'Aero Spin Pro',   power:0.94, spin:1.42, control:1.15, color:0x0284c7, accent:'#38bdf8', desc:'Tacky surface maximizing sidespin & arcs.' },
+  { name:'Carbon Strike',   power:1.28, spin:0.90, control:0.95, color:0x27272a, accent:'#a1a1aa', desc:'Dual carbon weave for blistering speed smashes.' },
+  { name:'Vortex Spin',     power:0.98, spin:1.62, control:1.10, color:0x7c3aed, accent:'#a78bfa', desc:'High-friction topspin loop mastery.' },
+  { name:'Titanium Aegis',  power:1.08, spin:1.05, control:1.58, color:0x475569, accent:'#94a3b8', desc:'Reinforced core returning bullets with stability.' },
+  { name:'Inferno Pro',     power:1.46, spin:1.32, control:0.92, color:0xdc2626, accent:'#f87171', desc:'Explosive offensive drive setup.' },
+  { name:'Cyber Phantom',   power:1.36, spin:1.52, control:1.18, color:0x06b6d4, accent:'#22d3ee', desc:'Composite cyber weave delivering razor precision.' },
+  { name:"Champion's Edge", power:1.40, spin:1.48, control:1.38, color:0xf59e0b, accent:'#fde68a', desc:'Gold-medal standard blade.' },
+  { name:'Nebula Void',     power:1.58, spin:1.78, control:1.42, color:0xec4899, accent:'#f472b6', desc:'Cosmic hyperspin composite.' },
+  { name:'Solar Flare',     power:1.62, spin:1.65, control:1.30, color:0xf97316, accent:'#fb923c', desc:'Overcharged power blade.' },
+  { name:'Quantum Zero',    power:1.68, spin:1.85, control:1.50, color:0x10b981, accent:'#34d399', desc:'The ultimate legendary championship blade.' }
+];
+
+/* =====================================================================
+   4 CORE STREAMLINED SERVE ARCHETYPES (ZERO-GRIND)
+   ===================================================================== */
+var QUICK_SERVES = [
+  { id:'bullet_topspin', name:'Bullet Topspin',   anim:'drive',     tossH:0.28, spinX:24,  spinY:4,   b1:0.75, b2:-1.20, speed:6.5, arc:0.12, tone:490 },
+  { id:'ghost_backspin', name:'Ghost Backspin',   anim:'chop',      tossH:0.32, spinX:-30, spinY:0,   b1:0.52, b2:-0.58, speed:4.0, arc:0.18, tone:240 },
+  { id:'vortex_pendulum',name:'Pendulum Hook',    anim:'pendulum',  tossH:0.36, spinX:12,  spinY:-30, b1:0.64, b2:-0.92, speed:4.8, arc:0.15, tone:420 },
+  { id:'axe_tomahawk',   name:'Tomahawk Axe',     anim:'tomahawk',  tossH:0.42, spinX:22,  spinY:26,  b1:0.68, b2:-1.08, speed:5.8, arc:0.16, tone:540 }
+];
+
+var selectedArchetypeIndex = 0;
+var currentDashboardTab = 'levels';
+
+var progress = {
+  unlockedLevels: [true, false, false, false, false, false, false, false, false, false, false, false],
+  levelStars: {},
+  unlockedBats:   [true, true, true, false, false, false, false, false, false, false, false, false],
+  selectedLevel: 0,
+  selectedBat: 0,
+  selectedArena: 0,
+  gameMode: 'tour', // 'tour', 'endless'
+  endlessHighScore: 0,
+  soundEnabled: true,
+  cameraMode: 0
+};
+
+try {
+  var saved = localStorage.getItem('tt_career_progress_v35');
+  if(saved){
+    var parsed = JSON.parse(saved);
+    if(parsed && parsed.unlockedLevels) progress = parsed;
+  }
+} catch(e){}
+
+function saveProgress(){
+  try { localStorage.setItem('tt_career_progress_v35', JSON.stringify(progress)); } catch(e){}
+}
+
+/* =====================================================================
+   ACOUSTIC SOUND ENGINE
+   ===================================================================== */
+var AudioSys = {
+  ctx: null,
+  init: function(){
+    if(!this.ctx){
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if(AudioContext) this.ctx = new AudioContext();
+    }
+    if(this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+  },
+  playTone: function(freq, type, duration, vol, slideFreq){
+    if(!progress.soundEnabled || !this.ctx) return;
+    try {
+      var t = this.ctx.currentTime;
+      var osc = this.ctx.createOscillator();
+      var gain = this.ctx.createGain();
+      osc.type = type || 'sine';
+      osc.frequency.setValueAtTime(freq, t);
+      if(slideFreq) osc.frequency.exponentialRampToValueAtTime(Math.max(10, slideFreq), t + duration);
+      gain.gain.setValueAtTime(vol || 0.3, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + duration);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(t);
+      osc.stop(t + duration);
+    } catch(e){}
+  },
+  hitPaddle: function(isSmash, isSpin, customFreq){
+    this.init();
+    if(customFreq){
+      this.playTone(customFreq, 'triangle', 0.11, 0.45, customFreq * 0.6);
+      return;
+    }
+    if(isSmash){
+      this.playTone(360, 'triangle', 0.22, 0.85, 55);
+      this.playTone(180, 'sawtooth', 0.18, 0.65, 30);
+    } else if(isSpin){
+      this.playTone(600, 'sine', 0.08, 0.4, 380);
+    } else {
+      this.playTone(480, 'sine', 0.06, 0.35, 260);
+    }
+  },
+  hitTable: function(){
+    this.init();
+    this.playTone(290, 'triangle', 0.05, 0.32, 160);
+  },
+  score: function(isPlayer){
+    this.init();
+    if(isPlayer){
+      this.playTone(523.25, 'triangle', 0.1, 0.35);
+      setTimeout(function(){ AudioSys.playTone(659.25, 'triangle', 0.16, 0.4); }, 90);
+    } else {
+      this.playTone(392.00, 'sine', 0.12, 0.28, 250);
+    }
+  },
+  cheer: function(){
+    this.init();
+    if(!progress.soundEnabled || !this.ctx) return;
+    try {
+      var bufferSize = this.ctx.sampleRate * 0.6;
+      var buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      var output = buffer.getChannelData(0);
+      for (var i = 0; i < bufferSize; i++) {
+        output[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+      }
+      var whiteNoise = this.ctx.createBufferSource();
+      whiteNoise.buffer = buffer;
+      var filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 1150;
+      var gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.6);
+      whiteNoise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+      whiteNoise.start();
+    } catch(e){}
+  },
+  fanfare: function(won){
+    this.init();
+    if(won){
+      [523.25, 659.25, 783.99, 1046.50].forEach(function(f, idx){
+        setTimeout(function(){ AudioSys.playTone(f, 'triangle', 0.26, 0.38); }, idx * 130);
+      });
+      setTimeout(function(){ AudioSys.cheer(); }, 480);
+    } else {
+      [400, 350, 300, 220].forEach(function(f, idx){
+        setTimeout(function(){ AudioSys.playTone(f, 'sawtooth', 0.22, 0.26, f-40); }, idx * 140);
+      });
+    }
+  }
+};
+
+/* =====================================================================
+   THREE.JS ARENA & LIGHTING ENGINE
+   ===================================================================== */
+var canvas = document.getElementById('game');
+var scene = new THREE.Scene();
+var curArena = ARENAS[progress.selectedArena];
+scene.background = new THREE.Color(curArena.fogColor);
+scene.fog = new THREE.Fog(curArena.fogColor, 7, 26);
+
+// WIDE-ANGLE ADAPTIVE CAMERA (62° FOV TO PREVENT CUTOFF)
+var camera = new THREE.PerspectiveCamera(62, window.innerWidth/window.innerHeight, 0.05, 100);
+var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+function onResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.fov = window.innerWidth < 600 ? 68 : 62;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', function(){ setTimeout(onResize, 200); });
+
+/* Stadium Lights */
+var ambientLight = new THREE.AmbientLight(0x8896ba, 0.85);
+scene.add(ambientLight);
+
+var keyLight = new THREE.DirectionalLight(0xfff7ec, 1.55);
+keyLight.position.set(1.8, 4.4, 1.0);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.left = -2.5; keyLight.shadow.camera.right = 2.5;
+keyLight.shadow.camera.top = 2.5;   keyLight.shadow.camera.bottom = -2.5;
+keyLight.shadow.camera.near = 0.5;  keyLight.shadow.camera.far = 10;
+scene.add(keyLight);
+
+var rimLight = new THREE.DirectionalLight(curArena.accentColor, 0.75);
+rimLight.position.set(-3.0, 3.2, -4.0);
+scene.add(rimLight);
+
+var fillLight = new THREE.DirectionalLight(0xff6426, 0.5);
+fillLight.position.set(3.0, 2.6, 4.0);
+scene.add(fillLight);
+
+/* Dynamic Crowd Camera Flash Light */
+var crowdFlashLight = new THREE.PointLight(0xffffff, 0, 15);
+crowdFlashLight.position.set(0, 3.5, -6.0);
+scene.add(crowdFlashLight);
+
+/* Floor */
+var floorMat = new THREE.MeshStandardMaterial({ color:curArena.floorColor, roughness:0.65, metalness:0.2 });
+var floor = new THREE.Mesh(new THREE.PlaneGeometry(45, 45), floorMat);
+floor.rotation.x = -Math.PI/2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+/* Stadium Stands Backdrop */
+var standMat = new THREE.MeshStandardMaterial({ color:0x0f172a, roughness:0.85 });
+for(var s=0; s<4; s++){
+  var stand = new THREE.Mesh(new THREE.BoxGeometry(18, 1.3, 1.1), standMat);
+  stand.position.set(0, 0.65 + s*0.95, -6.8 - s*1.15);
+  scene.add(stand);
+}
+
+/* LED Board */
+function createLedTexture(arenaTitle){
+  var c = document.createElement('canvas');
+  c.width = 1024; c.height = 128;
+  var ctx = c.getContext('2d');
+  var g = ctx.createLinearGradient(0,0,1024,0);
+  g.addColorStop(0,'#0b1329'); g.addColorStop(0.5,'#1e293b'); g.addColorStop(1,'#0b1329');
+  ctx.fillStyle = g; ctx.fillRect(0,0,1024,128);
+  ctx.fillStyle = '#00d2ff';
+  ctx.font = 'bold 36px Orbitron, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText((arenaTitle || 'ITTF WORLD TOUR').toUpperCase() + ' • PRO CHAMPIONSHIP', 512, 75);
+  return new THREE.CanvasTexture(c);
+}
+var ledBoard = new THREE.Mesh(
+  new THREE.PlaneGeometry(13, 1.5),
+  new THREE.MeshBasicMaterial({ map:createLedTexture(curArena.name) })
+);
+ledBoard.position.set(0, 0.75, -5.6);
+scene.add(ledBoard);
+
+/* Table */
+var tableGroup = new THREE.Group();
+
+function createTableSurfaceTexture(hexColor){
+  var c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  var ctx = c.getContext('2d');
+  ctx.fillStyle = hexColor || '#0c5196';
+  ctx.fillRect(0,0,512,512);
+  for(var i=0;i<1400;i++){
+    ctx.fillStyle = 'rgba(255,255,255,'+(Math.random()*0.025).toFixed(3)+')';
+    ctx.fillRect(Math.random()*512, Math.random()*512, 1.5, 1.5);
+  }
+  var tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2, 3.6);
+  return tex;
+}
+
+var tableTop = new THREE.Mesh(
+  new THREE.BoxGeometry(TABLE_WIDTH, TABLE_THICK, TABLE_LENGTH),
+  new THREE.MeshStandardMaterial({ map:createTableSurfaceTexture(curArena.tableColor), roughness:0.35, metalness:0.06 })
+);
+tableTop.position.y = TABLE_SURFACE_Y - TABLE_THICK/2;
+tableTop.castShadow = true;
+tableTop.receiveShadow = true;
+tableGroup.add(tableTop);
+
+var apron = new THREE.Mesh(
+  new THREE.BoxGeometry(TABLE_WIDTH+0.04, 0.07, TABLE_LENGTH+0.04),
+  new THREE.MeshStandardMaterial({ color:0x08264a, roughness:0.6 })
+);
+apron.position.y = TABLE_SURFACE_Y - TABLE_THICK - 0.035;
+tableGroup.add(apron);
+
+function addTableLine(w,h,d,x,y,z){
+  var line = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshBasicMaterial({ color:0xffffff }));
+  line.position.set(x,y,z);
+  tableGroup.add(line);
+}
+var LY = TABLE_SURFACE_Y + 0.001;
+var LW = 0.02;
+addTableLine(LW, 0.001, TABLE_LENGTH, -TABLE_WIDTH/2 + LW/2, LY, 0);
+addTableLine(LW, 0.001, TABLE_LENGTH, TABLE_WIDTH/2 - LW/2, LY, 0);
+addTableLine(TABLE_WIDTH, 0.001, LW, 0, LY, -TABLE_LENGTH/2 + LW/2);
+addTableLine(TABLE_WIDTH, 0.001, LW, 0, LY, TABLE_LENGTH/2 - LW/2);
+addTableLine(0.004, 0.001, TABLE_LENGTH, 0, LY, 0);
+
+var legMat = new THREE.MeshStandardMaterial({ color:0x1e293b, roughness:0.5, metalness:0.4 });
+function addLeg(x, z){
+  var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, TABLE_SURFACE_Y - TABLE_THICK, 16), legMat);
+  leg.position.set(x, (TABLE_SURFACE_Y - TABLE_THICK)/2, z);
+  leg.castShadow = true;
+  tableGroup.add(leg);
+}
+addLeg(-TABLE_WIDTH*0.4, -TABLE_LENGTH*0.38);
+addLeg(TABLE_WIDTH*0.4, -TABLE_LENGTH*0.38);
+addLeg(-TABLE_WIDTH*0.4, TABLE_LENGTH*0.38);
+addLeg(TABLE_WIDTH*0.4, TABLE_LENGTH*0.38);
+
+function createNetTexture(){
+  var c = document.createElement('canvas');
+  c.width = 64; c.height = 64;
+  var ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(240,245,255,0.78)';
+  ctx.fillRect(0,0,64,64);
+  ctx.fillStyle = 'rgba(10,20,35,0.92)';
+  for(var i=0;i<64;i+=8){
+    for(var j=0;j<64;j+=8){ ctx.fillRect(i+1, j+1, 6, 6); }
+  }
+  var tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(16, 2);
+  return tex;
+}
+var netMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(TABLE_WIDTH + 0.16, NET_HEIGHT),
+  new THREE.MeshStandardMaterial({ map:createNetTexture(), transparent:true, opacity:0.9, side:THREE.DoubleSide })
+);
+netMesh.position.set(0, TABLE_SURFACE_Y + NET_HEIGHT/2, 0);
+tableGroup.add(netMesh);
+
+var netTopTape = new THREE.Mesh(
+  new THREE.BoxGeometry(TABLE_WIDTH + 0.16, 0.015, NET_THICK),
+  new THREE.MeshBasicMaterial({ color:0xfafbfc })
+);
+netTopTape.position.set(0, TABLE_SURFACE_Y + NET_HEIGHT - 0.007, 0);
+tableGroup.add(netTopTape);
+
+function addNetPost(x){
+  var post = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, NET_HEIGHT+0.04, 12), legMat);
+  post.position.set(x, TABLE_SURFACE_Y + NET_HEIGHT/2, 0);
+  tableGroup.add(post);
+}
+addNetPost(-TABLE_WIDTH/2 - 0.08);
+addNetPost(TABLE_WIDTH/2 + 0.08);
+
+/* Target Landing Ring */
+var aimTargetMesh = new THREE.Mesh(
+  new THREE.RingGeometry(0.06, 0.09, 24),
+  new THREE.MeshBasicMaterial({ color:0xff6426, side:THREE.DoubleSide, transparent:true, opacity:0.85 })
+);
+aimTargetMesh.rotation.x = -Math.PI/2;
+aimTargetMesh.position.set(0, TABLE_SURFACE_Y + 0.003, -0.9);
+aimTargetMesh.visible = false;
+tableGroup.add(aimTargetMesh);
+
+/* Visual Serve Trajectory Arc */
+var trajPointsCount = 28;
+var trajGeom = new THREE.BufferGeometry();
+var trajPositions = new Float32Array(trajPointsCount * 3);
+trajGeom.setAttribute('position', new THREE.BufferAttribute(trajPositions, 3));
+var trajLine = new THREE.Line(
+  trajGeom,
+  new THREE.LineDashedMaterial({ color:0xff8844, dashSize:0.04, gapSize:0.02, transparent:true, opacity:0.75 })
+);
+trajLine.visible = false;
+scene.add(trajLine);
+
+scene.add(tableGroup);
+
+/* =====================================================================
+   PADDLES
+   ===================================================================== */
+function createPaddleMesh(colorHex){
+  var group = new THREE.Group();
+  
+  var rubberFront = new THREE.Mesh(
+    new THREE.CylinderGeometry(PADDLE_RADIUS, PADDLE_RADIUS, 0.007, 32),
+    new THREE.MeshStandardMaterial({ color: colorHex, roughness:0.32, metalness:0.04 })
+  );
+  rubberFront.rotation.x = Math.PI/2;
+  rubberFront.position.z = 0.004;
+  rubberFront.castShadow = true;
+  group.add(rubberFront);
+
+  var rubberBack = new THREE.Mesh(
+    new THREE.CylinderGeometry(PADDLE_RADIUS, PADDLE_RADIUS, 0.007, 32),
+    new THREE.MeshStandardMaterial({ color: 0x18181b, roughness:0.32, metalness:0.04 })
+  );
+  rubberBack.rotation.x = Math.PI/2;
+  rubberBack.position.z = -0.004;
+  rubberBack.castShadow = true;
+  group.add(rubberBack);
+
+  var woodRim = new THREE.Mesh(
+    new THREE.CylinderGeometry(PADDLE_RADIUS*1.02, PADDLE_RADIUS*1.02, 0.015, 32),
+    new THREE.MeshStandardMaterial({ color:0xd4a373, roughness:0.7 })
+  );
+  woodRim.rotation.x = Math.PI/2;
+  group.add(woodRim);
+
+  var handle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.028, 0.11, 0.024),
+    new THREE.MeshStandardMaterial({ color:0x3e2723, roughness:0.75 })
+  );
+  handle.position.set(0, -PADDLE_RADIUS - 0.04, 0);
+  handle.castShadow = true;
+  group.add(handle);
+
+  return group;
+}
+
+var playerPaddle = createPaddleMesh(BATS[progress.selectedBat].color);
+playerPaddle.position.set(0, PADDLE_Y_REST, PLAYER_Z);
+scene.add(playerPaddle);
+
+var curOpponent = LEVELS[progress.selectedLevel];
+var aiPaddle = createPaddleMesh(curOpponent.color);
+aiPaddle.position.set(0, PADDLE_Y_REST, AI_Z);
+scene.add(aiPaddle);
+
+function updatePlayerPaddleBat(){
+  var bat = BATS[progress.selectedBat];
+  playerPaddle.children[0].material.color.setHex(bat.color);
+  document.getElementById('batInfo').innerText = bat.name.toUpperCase();
+}
+
+function updateOpponentPaddle(){
+  curOpponent = LEVELS[progress.selectedLevel];
+  aiPaddle.children[0].material.color.setHex(curOpponent.color);
+  document.getElementById('opponentHUDName').innerText = curOpponent.name.split(' ')[0].toUpperCase();
+}
+
+function updateArenaTheme(){
+  curArena = ARENAS[progress.selectedArena];
+  scene.background.setHex(curArena.fogColor);
+  scene.fog.color.setHex(curArena.fogColor);
+  floorMat.color.setHex(curArena.floorColor);
+  rimLight.color.setHex(curArena.accentColor);
+  tableTop.material.map = createTableSurfaceTexture(curArena.tableColor);
+  tableTop.material.needsUpdate = true;
+  ledBoard.material.map = createLedTexture(curArena.name);
+  ledBoard.material.needsUpdate = true;
+}
+
+/* =====================================================================
+   HIGH-VISIBILITY BALL & SPIN AURA
+   ===================================================================== */
+function createBallTexture(){
+  var c = document.createElement('canvas');
+  c.width = 256; c.height = 128;
+  var ctx = c.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,256,128);
+  ctx.fillStyle = '#ff6426';
+  ctx.font = 'bold 24px Orbitron, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('★★★ ITTF', 128, 70);
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(4,4,248,120);
+  return new THREE.CanvasTexture(c);
+}
+
+var ballMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(BALL_RADIUS, 32, 32),
+  new THREE.MeshStandardMaterial({ map:createBallTexture(), roughness:0.18, metalness:0.04 })
+);
+ballMesh.castShadow = true;
+scene.add(ballMesh);
+
+var spinAuraMesh = new THREE.Mesh(
+  new THREE.TorusGeometry(BALL_RADIUS * 1.4, 0.0025, 8, 24),
+  new THREE.MeshBasicMaterial({ color:0x00d2ff, transparent:true, opacity:0.8 })
+);
+spinAuraMesh.visible = false;
+scene.add(spinAuraMesh);
+
+var ballShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(BALL_RADIUS*1.4, 20),
+  new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.45 })
+);
+ballShadow.rotation.x = -Math.PI/2;
+ballShadow.position.y = TABLE_SURFACE_Y + 0.002;
+scene.add(ballShadow);
+
+var ball = {
+  x: 0, y: TABLE_SURFACE_Y + 0.2, z: 0,
+  vx: 0, vy: 0, vz: 0,
+  spinX: 0, spinY: 0,
+  lastHitter: 'none',
+  isServe: false,
+  bouncesPlayer: 0, bouncesAI: 0,
+  inPlay: false
+};
+
+var trailPoints = [];
+for(var tp=0; tp<22; tp++){
+  var trMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_RADIUS*(1 - tp*0.042), 8, 8),
+    new THREE.MeshBasicMaterial({ color:0xffffff, transparent:true, opacity:0.75 * (1 - tp/22) })
+  );
+  trMesh.visible = false;
+  scene.add(trMesh);
+  trailPoints.push(trMesh);
+}
+var trailHistory = [];
+
+var particles = [];
+for(var pi=0; pi<60; pi++){
+  var pMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.01, 8, 8),
+    new THREE.MeshBasicMaterial({ color:0xffa040, transparent:true, opacity:0.95 })
+  );
+  pMesh.visible = false;
+  scene.add(pMesh);
+  particles.push({ mesh:pMesh, vx:0, vy:0, vz:0, life:0, maxLife:0.35 });
+}
+
+function spawnSparks(x, y, z, colorHex, count, powerMult){
+  var mult = powerMult || 1.0;
+  var spawned = 0;
+  for(var i=0; i<particles.length && spawned < count; i++){
+    var p = particles[i];
+    if(p.life <= 0){
+      p.mesh.position.set(x, y, z);
+      p.mesh.material.color.setHex(colorHex || 0xffaa33);
+      p.mesh.visible = true;
+      p.vx = (Math.random()-0.5)*3.8*mult;
+      p.vy = (Math.random()*2.8 + 0.6)*mult;
+      p.vz = (Math.random()-0.5)*3.8*mult;
+      p.life = (0.28 + Math.random()*0.18);
+      p.maxLife = p.life;
+      spawned++;
+    }
+  }
+}
+
+/* =====================================================================
+   GAME ENGINE & STATE LOGIC
+   ===================================================================== */
+var STATE = {
+  MENU: 0,
+  SERVE_WAIT: 1,
+  SERVE_ANIM: 2,
+  RALLY: 3,
+  POINT_SCORED: 4,
+  MATCH_OVER: 5
+};
+var gameState = STATE.MENU;
+var matchStarted = false;
+var isPaused = false;
+var savedStateBeforePause = STATE.MENU;
+
+var scorePlayer = 0;
+var scoreAI = 0;
+var currentServer = 'player';
+var totalServes = 0;
+var currentRallyCount = 0;
+var playerSmashesCount = 0;
+
+var playerPaddleTarget = { x:0, y:PADDLE_Y_REST, z:PLAYER_Z };
+var playerPaddlePrev   = { x:0, y:PADDLE_Y_REST, z:PLAYER_Z };
+var playerPaddleVel    = { x:0, y:0, z:0 };
+
+var aiPaddleTarget = { x:0, y:PADDLE_Y_REST, z:AI_Z };
+var aiPaddlePrev   = { x:0, y:PADDLE_Y_REST, z:AI_Z };
+var aiPaddleVel    = { x:0, y:0, z:0 };
+
+var bannerTimeout = null;
+var screenShakeTime = 0;
+var slowMoTime = 0;
+var crowdFlashTimer = 0;
+
+// Dynamic Camera Interpolators
+var currentCamLookAt = new THREE.Vector3(0, TABLE_SURFACE_Y + 0.10, 0);
+
+var serveAnimState = {
+  active: false,
+  server: 'player',
+  time: 0,
+  totalTime: 0.65,
+  serveData: null,
+  tossVy: 0,
+  peakY: 0,
+  executedHit: false
+};
+
+function triggerScreenShake(duration){
+  screenShakeTime = duration || 0.25;
+}
+
+function showBanner(text, type){
+  var b = document.getElementById('banner');
+  b.innerText = text;
+  b.className = (type ? type + ' show' : 'show');
+  if(bannerTimeout) clearTimeout(bannerTimeout);
+  bannerTimeout = setTimeout(function(){ b.className = ''; }, 1300);
+}
+
+function updateHUD(){
+  document.getElementById('scorePlayer').innerText = scorePlayer;
+  document.getElementById('scoreAI').innerText = scoreAI;
+  document.getElementById('serveWho').innerText = currentServer === 'player' ? 'YOU' : curOpponent.name.split(' ')[0].toUpperCase();
+  
+  var modeLabel = progress.gameMode === 'endless' ? 'ENDLESS RALLY' : ('STAGE ' + (progress.selectedLevel+1) + ' · ' + curOpponent.name.toUpperCase());
+  document.getElementById('levelInfo').innerText = modeLabel;
+
+  var sb = document.getElementById('scoreboard');
+  var isMatchPoint = (scorePlayer >= WIN_SCORE - 1 || scoreAI >= WIN_SCORE - 1) && Math.abs(scorePlayer - scoreAI) >= 1;
+  if(isMatchPoint && progress.gameMode === 'tour') sb.classList.add('match-point');
+  else sb.classList.remove('match-point');
+
+  var rallyEl = document.getElementById('rallyBadge');
+  if(currentRallyCount >= 3){
+    rallyEl.innerText = (progress.gameMode === 'endless' ? 'STREAK ' : 'RALLY ') + currentRallyCount;
+    rallyEl.classList.add('visible');
+    if(currentRallyCount >= 7) rallyEl.classList.add('fever');
+    else rallyEl.classList.remove('fever');
+  } else {
+    rallyEl.classList.remove('visible');
+  }
+
+  var feverPct = Math.min(100, (currentRallyCount / 8) * 100);
+  document.getElementById('feverFill').style.width = feverPct + '%';
+
+  var curBat = BATS[progress.selectedBat];
+  document.getElementById('equippedSummary').innerHTML = 'Stage: <b>' + (progress.selectedLevel+1) + '. ' + curOpponent.name + '</b> • Blade: <b>' + curBat.name + '</b>';
+}
+
+/* =====================================================================
+   STREAMLINED SERVE CONTROLS & AIM PROJECTION
+   ===================================================================== */
+document.querySelectorAll('#serveButtonRow .serve-mode-btn').forEach(function(btn){
+  btn.addEventListener('click', function(e){
+    e.stopPropagation();
+    document.querySelectorAll('#serveButtonRow .serve-mode-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    selectedArchetypeIndex = parseInt(btn.dataset.archetype);
+    updateAimTargetVisual();
+  });
+});
+
+function updateAimTargetVisual(){
+  if(gameState === STATE.SERVE_WAIT && currentServer === 'player' && !isPaused){
+    var s = QUICK_SERVES[selectedArchetypeIndex];
+    aimTargetMesh.visible = true;
+    aimTargetMesh.position.z = s.b2;
+    aimTargetMesh.position.x = (s.spinY * 0.01);
+
+    // Compute Projected Serve Curve
+    trajLine.visible = true;
+    var startP = { x: playerPaddle.position.x, y: TABLE_SURFACE_Y + 0.16, z: PLAYER_Z - 0.16 };
+    var sol = calculateServeTrajectory(startP, s.b1, s.b2, s.spinY * 0.01, s.speed, s.arc, s.spinX);
+    var posArr = trajGeom.attributes.position.array;
+    var simX = startP.x, simY = startP.y, simZ = startP.z;
+    var simVx = sol.vx, simVy = sol.vy, simVz = sol.vz;
+    var stepDt = 0.024;
+
+    for(var p=0; p<trajPointsCount; p++){
+      posArr[p*3] = simX;
+      posArr[p*3+1] = simY;
+      posArr[p*3+2] = simZ;
+      simVy += GRAVITY * stepDt;
+      simX += simVx * stepDt;
+      simY += simVy * stepDt;
+      simZ += simVz * stepDt;
+      if(simY <= TABLE_SURFACE_Y && simVy < 0){
+        simY = TABLE_SURFACE_Y;
+        simVy = -simVy * REST_TABLE;
+      }
+    }
+    trajGeom.attributes.position.needsUpdate = true;
+    trajLine.computeLineDistances();
+  } else {
+    aimTargetMesh.visible = false;
+    trajLine.visible = false;
+  }
+}
+
+function resetBallForServe(){
+  ball.vx = 0; ball.vy = 0; ball.vz = 0;
+  ball.spinX = 0; ball.spinY = 0;
+  ball.bouncesPlayer = 0; ball.bouncesAI = 0;
+  ball.inPlay = false; ball.isServe = true;
+  serveAnimState.active = false;
+  currentRallyCount = 0;
+  updateHUD();
+
+  var quickServeDock = document.getElementById('quickServeDock');
+
+  if(currentServer === 'player'){
+    gameState = STATE.SERVE_WAIT;
+    ball.x = playerPaddle.position.x;
+    ball.y = playerPaddle.position.y + 0.02;
+    ball.z = playerPaddle.position.z - 0.16;
+    ball.lastHitter = 'none';
+    ballMesh.position.set(ball.x, ball.y, ball.z);
+    quickServeDock.classList.remove('hidden');
+    updateAimTargetVisual();
+  } else {
+    quickServeDock.classList.add('hidden');
+    aimTargetMesh.visible = false;
+    trajLine.visible = false;
+    gameState = STATE.SERVE_WAIT;
+    ball.x = 0;
+    ball.y = TABLE_SURFACE_Y + 0.16;
+    ball.z = AI_Z + 0.18;
+    ball.lastHitter = 'none';
+    ballMesh.position.set(ball.x, ball.y, ball.z);
+    showBanner(curOpponent.name.split(' ')[0].toUpperCase() + ' SERVING...');
+    setTimeout(function(){ if(gameState === STATE.SERVE_WAIT && currentServer === 'ai' && !isPaused) startAIServeAnimation(); }, 900);
+  }
+}
+
+function startMatch(levelIdx){
+  progress.selectedLevel = levelIdx;
+  saveProgress();
+  matchStarted = true;
+  isPaused = false;
+  scorePlayer = 0;
+  scoreAI = 0;
+  currentServer = 'player';
+  totalServes = 0;
+  currentRallyCount = 0;
+  playerSmashesCount = 0;
+  updateOpponentPaddle();
+  updateHUD();
+  updatePlayerPaddleBat();
+  resetBallForServe();
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('dashCloseBtn').style.display = 'inline-block';
+  document.getElementById('dashStartBtn').innerText = 'REMATCH';
+}
+
+function determineNextServer(){
+  totalServes++;
+  if(scorePlayer >= 10 && scoreAI >= 10){
+    currentServer = (currentServer === 'player') ? 'ai' : 'player';
+  } else {
+    if(totalServes % 2 === 0){
+      currentServer = (currentServer === 'player') ? 'ai' : 'player';
+    }
+  }
+}
+
+function endPoint(winner, reason){
+  if(gameState === STATE.POINT_SCORED || gameState === STATE.MATCH_OVER) return;
+  gameState = STATE.POINT_SCORED;
+  serveAnimState.active = false;
+  document.getElementById('quickServeDock').classList.add('hidden');
+  aimTargetMesh.visible = false;
+  trajLine.visible = false;
+
+  if(currentRallyCount >= 7) AudioSys.cheer();
+
+  if(progress.gameMode === 'endless'){
+    if(currentRallyCount > progress.endlessHighScore){
+      progress.endlessHighScore = currentRallyCount;
+      saveProgress();
+      showBanner('NEW RECORD: ' + currentRallyCount, 'smash');
+    }
+  }
+
+  if(winner === 'player'){
+    scorePlayer++;
+    AudioSys.score(true);
+    showBanner('POINT PLAYER!');
+  } else {
+    scoreAI++;
+    AudioSys.score(false);
+    showBanner('POINT ' + curOpponent.name.split(' ')[0].toUpperCase());
+  }
+  updateHUD();
+
+  var isWin = (scorePlayer >= WIN_SCORE && scorePlayer - scoreAI >= 2);
+  var isLoss = (scoreAI >= WIN_SCORE && scoreAI - scorePlayer >= 2);
+
+  if((isWin || isLoss) && progress.gameMode !== 'endless'){
+    gameState = STATE.MATCH_OVER;
+    matchStarted = false;
+    if(isWin) slowMoTime = 0.5;
+    setTimeout(function(){ onMatchFinished(isWin); }, 1100);
+  } else {
+    determineNextServer();
+    updateHUD();
+    setTimeout(function(){
+      if(gameState !== STATE.MENU && !isPaused){
+        resetBallForServe();
+      }
+    }, 1200);
+  }
+}
+
+function onMatchFinished(playerWon){
+  AudioSys.fanfare(playerWon);
+  var newlyUnlockedLevel = -1;
+  var newlyUnlockedBat = -1;
+
+  if(playerWon){
+    var margin = scorePlayer - scoreAI;
+    var stars = 1;
+    if(margin >= 4) stars = 2;
+    if(margin >= 6 || playerSmashesCount >= 3) stars = 3;
+
+    progress.levelStars[progress.selectedLevel] = Math.max(progress.levelStars[progress.selectedLevel] || 0, stars);
+
+    if(progress.selectedLevel < LEVELS.length - 1 && !progress.unlockedLevels[progress.selectedLevel + 1]){
+      progress.unlockedLevels[progress.selectedLevel + 1] = true;
+      newlyUnlockedLevel = progress.selectedLevel + 1;
+    }
+    for(var b = 0; b < BATS.length; b++){
+      if(!progress.unlockedBats[b]){
+        progress.unlockedBats[b] = true;
+        newlyUnlockedBat = b;
+        break;
+      }
+    }
+    saveProgress();
+  }
+
+  showMatchEndOverlay(playerWon, newlyUnlockedLevel, newlyUnlockedBat);
+}
+
+/* =====================================================================
+   KINEMATIC SERVE ANIMATIONS
+   ===================================================================== */
+function startPlayerServeAnimation(){
+  if(gameState !== STATE.SERVE_WAIT || currentServer !== 'player' || isPaused) return;
+  
+  gameState = STATE.SERVE_ANIM;
+  document.getElementById('quickServeDock').classList.add('hidden');
+  aimTargetMesh.visible = false;
+  trajLine.visible = false;
+
+  var sType = QUICK_SERVES[selectedArchetypeIndex];
+  var tossH = sType.tossH || 0.35;
+  var tossVy = Math.sqrt(2 * Math.abs(GRAVITY) * tossH);
+  var totalFlightTime = (2 * tossVy) / Math.abs(GRAVITY);
+
+  serveAnimState.active = true;
+  serveAnimState.server = 'player';
+  serveAnimState.time = 0;
+  serveAnimState.totalTime = Math.max(0.55, totalFlightTime);
+  serveAnimState.serveData = sType;
+  serveAnimState.tossVy = tossVy;
+  serveAnimState.peakY = (TABLE_SURFACE_Y + 0.16) + tossH;
+  serveAnimState.executedHit = false;
+
+  ball.inPlay = false;
+  ball.isServe = true;
+  ball.x = playerPaddle.position.x;
+  ball.y = TABLE_SURFACE_Y + 0.16;
+  ball.z = PLAYER_Z - 0.16;
+  ball.vx = 0;
+  ball.vy = tossVy;
+  ball.vz = 0;
+}
+
+function startAIServeAnimation(){
+  if(gameState !== STATE.SERVE_WAIT || currentServer !== 'ai' || isPaused) return;
+
+  gameState = STATE.SERVE_ANIM;
+  var serveIdx = curOpponent.preferredArchetype || 0;
+  var aiServePick = QUICK_SERVES[serveIdx];
+  var tossH = aiServePick.tossH || 0.35;
+  var tossVy = Math.sqrt(2 * Math.abs(GRAVITY) * tossH);
+  var totalFlightTime = (2 * tossVy) / Math.abs(GRAVITY);
+
+  serveAnimState.active = true;
+  serveAnimState.server = 'ai';
+  serveAnimState.time = 0;
+  serveAnimState.totalTime = Math.max(0.55, totalFlightTime);
+  serveAnimState.serveData = aiServePick;
+  serveAnimState.tossVy = tossVy;
+  serveAnimState.peakY = (TABLE_SURFACE_Y + 0.16) + tossH;
+  serveAnimState.executedHit = false;
+
+  ball.inPlay = false;
+  ball.isServe = true;
+  ball.x = 0;
+  ball.y = TABLE_SURFACE_Y + 0.16;
+  ball.z = AI_Z + 0.18;
+  ball.vx = 0;
+  ball.vy = tossVy;
+  ball.vz = 0;
+}
+
+function updateServeAnimation(dt){
+  if(!serveAnimState.active) return;
+
+  serveAnimState.time += dt;
+  var s = serveAnimState.serveData;
+  var isPlayer = serveAnimState.server === 'player';
+  var paddle = isPlayer ? playerPaddle : aiPaddle;
+  var progressRatio = Math.min(1.0, serveAnimState.time / serveAnimState.totalTime);
+
+  // Ball toss parabola
+  ball.vy += GRAVITY * dt;
+  ball.y += ball.vy * dt;
+  ballMesh.position.set(ball.x, ball.y, ball.z);
+  ballShadow.position.set(ball.x, TABLE_SURFACE_Y + 0.002, ball.z);
+
+  // Stances
+  var anim = s.anim || 'drive';
+  var strikeTriggerTime = serveAnimState.totalTime * 0.78;
+
+  if(anim === 'tomahawk'){
+    if(progressRatio < 0.6){
+      paddle.position.set(isPlayer ? 0.18 : -0.18, TABLE_SURFACE_Y + 0.45, isPlayer ? PLAYER_Z : AI_Z);
+      paddle.rotation.set(0.6, 0, 1.2 * (isPlayer ? 1 : -1));
+    } else {
+      paddle.position.x += ((isPlayer ? -0.05 : 0.05) - paddle.position.x) * (14 * dt);
+      paddle.position.y += ((TABLE_SURFACE_Y + 0.15) - paddle.position.y) * (14 * dt);
+      paddle.rotation.z += ((-0.4 * (isPlayer ? 1 : -1)) - paddle.rotation.z) * (14 * dt);
+    }
+  } else if(anim === 'pendulum'){
+    if(progressRatio < 0.5){
+      paddle.position.set(isPlayer ? -0.22 : 0.22, TABLE_SURFACE_Y + 0.22, isPlayer ? PLAYER_Z : AI_Z);
+      paddle.rotation.set(0.2, (isPlayer ? 0.8 : -0.8), -0.5);
+    } else {
+      paddle.position.x += ((isPlayer ? 0.20 : -0.20) - paddle.position.x) * (16 * dt);
+      paddle.rotation.y += ((isPlayer ? -0.6 : 0.6) - paddle.rotation.y) * (16 * dt);
+    }
+  } else if(anim === 'chop'){
+    if(progressRatio < 0.5){
+      paddle.position.set(isPlayer ? 0.12 : -0.12, TABLE_SURFACE_Y + 0.42, isPlayer ? PLAYER_Z : AI_Z);
+      paddle.rotation.set(0.4, 0, 0);
+    } else {
+      paddle.position.y += ((TABLE_SURFACE_Y + 0.12) - paddle.position.y) * (18 * dt);
+      paddle.position.z += ((isPlayer ? PLAYER_Z - 0.25 : AI_Z + 0.25) - paddle.position.z) * (18 * dt);
+      paddle.rotation.x += (-0.6 - paddle.rotation.x) * (16 * dt);
+    }
+  } else {
+    if(progressRatio < 0.5){
+      paddle.position.set(isPlayer ? 0.15 : -0.15, TABLE_SURFACE_Y + 0.10, isPlayer ? PLAYER_Z : AI_Z);
+      paddle.rotation.set(-0.2, 0, 0);
+    } else {
+      paddle.position.y += ((TABLE_SURFACE_Y + 0.34) - paddle.position.y) * (18 * dt);
+      paddle.position.z += ((isPlayer ? PLAYER_Z - 0.2 : AI_Z + 0.2) - paddle.position.z) * (18 * dt);
+      paddle.rotation.x += (0.35 - paddle.rotation.x) * (16 * dt);
+    }
+  }
+
+  // Strike Instant
+  if(!serveAnimState.executedHit && serveAnimState.time >= strikeTriggerTime){
+    serveAnimState.executedHit = true;
+    if(isPlayer) firePlayerServeBallistics(s);
+    else fireAIServeBallistics(s);
+  }
+
+  if(serveAnimState.time >= serveAnimState.totalTime){
+    serveAnimState.active = false;
+    gameState = STATE.RALLY;
+  }
+}
+
+/* =====================================================================
+   BALLISTICS & BALL TRAJECTORY SOLVER
+   ===================================================================== */
+function solveTrajectory(startPos, targetPos, desiredFlightTime, minNetClearance){
+  var T = Math.max(0.20, desiredFlightTime || 0.40);
+  var vz = (targetPos.z - startPos.z) / T;
+  var vx = (targetPos.x - startPos.x) / T;
+  var vy = (targetPos.y - startPos.y - 0.5 * GRAVITY * T * T) / T;
+
+  var tNet = -startPos.z / vz;
+  if(tNet > 0 && tNet < T){
+    var yAtNet = startPos.y + vy * tNet + 0.5 * GRAVITY * tNet * tNet;
+    var netTop = TABLE_SURFACE_Y + NET_HEIGHT;
+    var requiredY = netTop + (minNetClearance || 0.09);
+
+    if(yAtNet < requiredY){
+      vy = (requiredY - startPos.y - 0.5 * GRAVITY * tNet * tNet) / tNet;
+    }
+  }
+
+  return { vx: vx, vy: vy, vz: vz };
+}
+
+function calculateServeTrajectory(startPos, bounce1Z, bounce2Z, targetX, baseSpeed, minNetClearance, initialSpinX){
+  var dir = Math.sign(bounce1Z - startPos.z);
+  var speedZ = dir * Math.max(3.6, Math.min(6.8, baseSpeed));
+  
+  var t1 = Math.abs(bounce1Z - startPos.z) / Math.abs(speedZ);
+  var tNetAfter = Math.abs(0 - bounce1Z) / Math.abs(speedZ);
+  var t2 = Math.abs(bounce2Z - bounce1Z) / Math.abs(speedZ);
+  
+  var netMargin = minNetClearance || 0.10;
+  if(initialSpinX > 10) netMargin += 0.04; 
+
+  var requiredNetY = TABLE_SURFACE_Y + NET_HEIGHT + netMargin;
+  var minVyAfter = (requiredNetY - TABLE_SURFACE_Y - 0.5 * GRAVITY * tNetAfter * tNetAfter) / tNetAfter;
+  var vyAfter = Math.max(minVyAfter, -0.5 * GRAVITY * t2);
+  
+  var vyImpact = -vyAfter / REST_TABLE;
+  var vy0 = vyImpact - GRAVITY * t1;
+  var vx0 = (targetX - startPos.x) / (t1 + t2);
+  
+  return { vx: vx0, vy: vy0, vz: speedZ };
+}
+
+function firePlayerServeBallistics(sType){
+  ball.inPlay = true;
+  ball.isServe = true;
+  ball.lastHitter = 'player';
+  ball.bouncesPlayer = 0;
+  ball.bouncesAI = 0;
+
+  var bat = BATS[progress.selectedBat];
+  var rawSpinX = sType.spinX;
+  var rawSpinY = sType.spinY;
+  
+  ball.spinX = rawSpinX * Math.min(1.4, Math.sqrt(bat.spin));
+  ball.spinY = rawSpinY * Math.min(1.4, Math.sqrt(bat.spin));
+
+  var targetX = THREE.MathUtils.clamp((playerPaddle.position.x * 0.45) + (ball.spinY * 0.007), -0.42, 0.42);
+  var tunedSpeed = sType.speed * (0.88 + 0.14 * bat.power);
+
+  var sol = calculateServeTrajectory({ x: ball.x, y: ball.y, z: ball.z }, sType.b1, sType.b2, targetX, tunedSpeed, sType.arc, ball.spinX);
+
+  ball.vx = sol.vx;
+  ball.vy = sol.vy;
+  ball.vz = sol.vz;
+
+  AudioSys.hitPaddle(false, true, sType.tone);
+  spawnSparks(ball.x, ball.y, ball.z, bat.color, 20, bat.power);
+  showBanner('⚡ ' + sType.name.toUpperCase(), 'spin');
+}
+
+function fireAIServeBallistics(aiServePick){
+  ball.inPlay = true;
+  ball.isServe = true;
+  ball.lastHitter = 'ai';
+  ball.bouncesPlayer = 0;
+  ball.bouncesAI = 0;
+
+  var lvl = curOpponent;
+  var bounce1Z = -aiServePick.b1;
+  var bounce2Z = -aiServePick.b2;
+  var targetX = (Math.random() - 0.5) * 0.44;
+
+  var sol = calculateServeTrajectory({ x: ball.x, y: ball.y, z: ball.z }, bounce1Z, bounce2Z, targetX, aiServePick.speed * lvl.aiPower, aiServePick.arc, -aiServePick.spinX);
+
+  ball.vx = sol.vx;
+  ball.vy = sol.vy;
+  ball.vz = -sol.vz;
+  ball.spinX = -aiServePick.spinX * lvl.spinSkill;
+  ball.spinY = -aiServePick.spinY * lvl.spinSkill;
+
+  AudioSys.hitPaddle(false, true, aiServePick.tone);
+  spawnSparks(ball.x, ball.y, ball.z, lvl.color, 16, lvl.aiPower);
+  showBanner(lvl.name.split(' ')[0].toUpperCase() + ' ' + aiServePick.name.toUpperCase(), 'spin');
+}
+
+/* =====================================================================
+   RAYCASTING-BASED PADDLE TRACKING
+   ===================================================================== */
+var raycaster = new THREE.Raycaster();
+var controlPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -PLAYER_Z);
+var rayTargetPos = new THREE.Vector3();
+
+function updatePlayerPaddlePosition(e){
+  if(isPaused || gameState === STATE.SERVE_ANIM) return;
+  var clientX = e.clientX;
+  var clientY = e.clientY;
+  if(e.touches && e.touches.length > 0){
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  } else if(clientX === undefined && e.changedTouches && e.changedTouches.length > 0){
+    clientX = e.changedTouches[0].clientX;
+    clientY = e.changedTouches[0].clientY;
+  }
+  if(clientX === undefined || clientY === undefined) return;
+
+  var ndcX = (clientX / window.innerWidth) * 2 - 1;
+  var ndcY = -(clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera({ x:ndcX, y:ndcY }, camera);
+  raycaster.ray.intersectPlane(controlPlane, rayTargetPos);
+
+  if(rayTargetPos){
+    playerPaddleTarget.x = THREE.MathUtils.clamp(rayTargetPos.x, -PADDLE_X_LIMIT, PADDLE_X_LIMIT);
+    playerPaddleTarget.y = THREE.MathUtils.clamp(rayTargetPos.y, PADDLE_Y_MIN, PADDLE_Y_MAX);
+    playerPaddleTarget.z = THREE.MathUtils.lerp(1.78, 0.70, (ndcY + 1.0) * 0.5);
+  }
+
+  if(gameState === STATE.SERVE_WAIT && currentServer === 'player'){
+    updateAimTargetVisual();
+  }
+}
+
+window.addEventListener('pointermove', updatePlayerPaddlePosition);
+
+window.addEventListener('pointerdown', function(e){
+  if(isPaused) return;
+  AudioSys.init();
+  if(e.target.closest('#quickServeDock') || e.target.closest('#topControls') || e.target.closest('#overlay')) return;
+  updatePlayerPaddlePosition(e);
+  if(gameState === STATE.SERVE_WAIT && currentServer === 'player'){
+    startPlayerServeAnimation();
+  }
+});
+
+document.getElementById('serveActionBtn').addEventListener('click', function(e){
+  e.stopPropagation();
+  AudioSys.init();
+  startPlayerServeAnimation();
+});
+
+window.addEventListener('keydown', function(e){
+  if(e.code === 'Escape' || e.code === 'KeyP'){
+    if(matchStarted && gameState !== STATE.MATCH_OVER){
+      if(isPaused) window.onCloseDash();
+      else showPauseMenu();
+      return;
+    }
+  }
+
+  if(gameState === STATE.SERVE_WAIT && currentServer === 'player' && !isPaused){
+    if(e.key >= '1' && e.key <= '4'){
+      selectedArchetypeIndex = parseInt(e.key) - 1;
+      document.querySelectorAll('#serveButtonRow .serve-mode-btn').forEach(function(b, idx){
+        if(idx === selectedArchetypeIndex) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      updateAimTargetVisual();
+      return;
+    }
+    if(e.code === 'KeyQ' || e.code === 'ArrowLeft'){
+      selectedArchetypeIndex = (selectedArchetypeIndex + 3) % 4;
+      document.querySelectorAll('#serveButtonRow .serve-mode-btn').forEach(function(b, idx){
+        if(idx === selectedArchetypeIndex) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      updateAimTargetVisual();
+      return;
+    }
+    if(e.code === 'KeyE' || e.code === 'ArrowRight'){
+      selectedArchetypeIndex = (selectedArchetypeIndex + 1) % 4;
+      document.querySelectorAll('#serveButtonRow .serve-mode-btn').forEach(function(b, idx){
+        if(idx === selectedArchetypeIndex) b.classList.add('active');
+        else b.classList.remove('active');
+      });
+      updateAimTargetVisual();
+      return;
+    }
+    if(e.code === 'Space'){ AudioSys.init(); startPlayerServeAnimation(); return; }
+  }
+});
+
+/* =====================================================================
+   SWEPT-SPHERE CONTINUOUS PHYSICS ENGINE
+   ===================================================================== */
+function updatePhysics(dt){
+  if(isPaused || gameState === STATE.MENU) return;
+  if(dt > 0.04) dt = 0.04;
+  if(slowMoTime > 0){
+    slowMoTime -= dt;
+    dt *= 0.45;
+  }
+
+  if(gameState === STATE.SERVE_ANIM){
+    updateServeAnimation(dt);
+    return;
+  }
+
+  var bat = BATS[progress.selectedBat];
+  var lvl = curOpponent;
+
+  playerPaddleVel.x = (playerPaddleTarget.x - playerPaddlePrev.x) / dt;
+  playerPaddleVel.y = (playerPaddleTarget.y - playerPaddlePrev.y) / dt;
+  playerPaddlePrev.x = playerPaddleTarget.x;
+  playerPaddlePrev.y = playerPaddleTarget.y;
+
+  playerPaddle.position.x += (playerPaddleTarget.x - playerPaddle.position.x) * 0.82;
+  playerPaddle.position.y += (playerPaddleTarget.y - playerPaddle.position.y) * 0.82;
+  playerPaddle.position.z += (playerPaddleTarget.z - playerPaddle.position.z) * 0.82;
+
+  var isBackhand = playerPaddle.position.x < -0.10;
+  playerPaddle.rotation.y = isBackhand ? Math.PI : 0;
+  playerPaddle.rotation.z = -playerPaddleVel.x * 0.04;
+  playerPaddle.rotation.x = 0.15 - (playerPaddleVel.y * 0.035);
+
+  if(gameState === STATE.SERVE_WAIT && currentServer === 'player'){
+    ball.x = playerPaddle.position.x;
+    ball.y = playerPaddle.position.y + 0.02;
+    ball.z = playerPaddle.position.z - 0.16;
+    ballMesh.position.set(ball.x, ball.y, ball.z);
+    ballShadow.visible = true;
+    ballShadow.position.set(ball.x, TABLE_SURFACE_Y + 0.002, ball.z);
+    spinAuraMesh.visible = false;
+    return;
+  }
+
+  // AI Paddle Motion
+  if(gameState === STATE.RALLY || (gameState === STATE.SERVE_WAIT && currentServer === 'ai')){
+    var isIncomingServe = ball.isServe && ball.lastHitter === 'player';
+    var aiSpeedMult = isIncomingServe ? Math.max(lvl.aiSpeed, 3.6) : lvl.aiSpeed;
+    var errorFactor = isIncomingServe ? (lvl.aiError * 0.05) : lvl.aiError;
+
+    var targetX = ball.x + (Math.sin(Date.now()*0.003) * errorFactor) - (ball.spinY * 0.010);
+    var targetY = THREE.MathUtils.clamp(ball.y, TABLE_SURFACE_Y + 0.06, TABLE_SURFACE_Y + 0.42);
+
+    aiPaddleTarget.x += (targetX - aiPaddleTarget.x) * Math.min(1.0, aiSpeedMult * dt * 3.6);
+    aiPaddleTarget.y += (targetY - aiPaddleTarget.y) * Math.min(1.0, aiSpeedMult * dt * 3.2);
+  } else {
+    aiPaddleTarget.x += (0 - aiPaddleTarget.x) * (2.0 * dt);
+    aiPaddleTarget.y += (PADDLE_Y_REST - aiPaddleTarget.y) * (2.0 * dt);
+  }
+
+  aiPaddleVel.x = (aiPaddleTarget.x - aiPaddlePrev.x) / dt;
+  aiPaddleVel.y = (aiPaddleTarget.y - aiPaddlePrev.y) / dt;
+  aiPaddlePrev.x = aiPaddleTarget.x;
+  aiPaddlePrev.y = aiPaddleTarget.y;
+
+  aiPaddle.position.x = aiPaddleTarget.x;
+  aiPaddle.position.y = aiPaddleTarget.y;
+  aiPaddle.rotation.z = aiPaddleVel.x * 0.03;
+  aiPaddle.rotation.x = -0.15;
+
+  if(gameState !== STATE.RALLY) return;
+
+  // Magnus Force & Aerodynamics
+  var magnusDamp = ball.isServe ? 0.65 : 1.0;
+  var magnusY = -ball.spinX * (MAGNUS_COEFF_Y * Math.min(1.4, bat.spin) * magnusDamp);
+  var magnusX = ball.spinY * (MAGNUS_COEFF_X * Math.min(1.4, bat.spin) * magnusDamp);
+
+  ball.vx += magnusX * dt;
+  ball.vy += (GRAVITY + magnusY) * dt;
+  ball.vx *= 0.995;
+  ball.vz *= 0.995;
+
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  ball.z += ball.vz * dt;
+
+  ballMesh.position.set(ball.x, ball.y, ball.z);
+  ballMesh.rotation.x += ball.spinX * dt;
+  ballMesh.rotation.y += ball.spinY * dt;
+
+  var speedKmh = (Math.hypot(ball.vx, ball.vy, ball.vz) * 3.6).toFixed(1);
+  var spinRpm = (Math.hypot(ball.spinX, ball.spinY) * 9.55).toFixed(0);
+  document.getElementById('telSpeed').innerText = speedKmh + ' km/h';
+  document.getElementById('telSpin').innerText = spinRpm + ' RPM';
+
+  // Spin Halo Aura
+  var totalSpin = Math.hypot(ball.spinX, ball.spinY);
+  if(totalSpin > 6){
+    spinAuraMesh.visible = true;
+    spinAuraMesh.position.set(ball.x, ball.y, ball.z);
+    spinAuraMesh.rotation.z += 12 * dt;
+    if(ball.spinX > 10) spinAuraMesh.material.color.setHex(0xff6426);
+    else if(ball.spinX < -8) spinAuraMesh.material.color.setHex(0x00d2ff);
+    else spinAuraMesh.material.color.setHex(0xc084fc);
+  } else {
+    spinAuraMesh.visible = false;
+  }
+
+  // Shadow
+  if(ball.y >= TABLE_SURFACE_Y && Math.abs(ball.x) <= TABLE_WIDTH/2 + 0.25 && Math.abs(ball.z) <= TABLE_LENGTH/2 + 0.25){
+    ballShadow.visible = true;
+    ballShadow.position.set(ball.x, TABLE_SURFACE_Y + 0.002, ball.z);
+    var scale = THREE.MathUtils.clamp(1.0 - (ball.y - TABLE_SURFACE_Y)*1.2, 0.35, 1.0);
+    ballShadow.scale.set(scale, scale, 1);
+  } else {
+    ballShadow.visible = false;
+  }
+
+  // Trails
+  trailHistory.unshift({ x:ball.x, y:ball.y, z:ball.z });
+  if(trailHistory.length > trailPoints.length) trailHistory.pop();
+
+  var isSmashShot = Math.abs(ball.vz) > 8.0;
+  var trailColor = 0xffffff;
+  if(isSmashShot) trailColor = 0xfde047;
+  else if(ball.spinX > 8) trailColor = 0xff6426;
+  else if(ball.spinX < -6) trailColor = 0x00d2ff;
+  else if(Math.abs(ball.spinY) > 6) trailColor = 0xa855f7;
+
+  for(var t=0; t<trailPoints.length; t++){
+    if(trailHistory[t]){
+      trailPoints[t].position.set(trailHistory[t].x, trailHistory[t].y, trailHistory[t].z);
+      trailPoints[t].material.color.setHex(trailColor);
+      trailPoints[t].visible = true;
+    } else {
+      trailPoints[t].visible = false;
+    }
+  }
+
+  // Net Collision
+  if(Math.abs(ball.z) < (NET_THICK/2 + BALL_RADIUS)){
+    if(ball.y < TABLE_SURFACE_Y + NET_HEIGHT){
+      if(Math.abs(ball.x) < TABLE_WIDTH/2 + 0.08){
+        ball.vz = -ball.vz * 0.35;
+        ball.vx *= 0.4;
+        ball.vy = Math.min(ball.vy, 0.4);
+        ball.z = Math.sign(ball.z || -1) * (NET_THICK/2 + BALL_RADIUS + 0.015);
+        spawnSparks(ball.x, ball.y, ball.z, 0xcccccc, 5, 0.6);
+      }
+    }
+  }
+
+  // Table Bounce
+  if(ball.y - BALL_RADIUS <= TABLE_SURFACE_Y && ball.y + BALL_RADIUS >= TABLE_SURFACE_Y - 0.08){
+    if(ball.vy < 0 && Math.abs(ball.x) <= TABLE_WIDTH/2 + 0.04 && Math.abs(ball.z) <= TABLE_LENGTH/2 + 0.04){
+      ball.y = TABLE_SURFACE_Y + BALL_RADIUS;
+      ball.vy = -ball.vy * REST_TABLE;
+
+      ball.vz -= (ball.spinX * 0.025);
+      ball.vx += (ball.spinY * 0.035);
+      ball.spinX *= 0.65;
+      ball.spinY *= 0.65;
+
+      AudioSys.hitTable();
+      spawnSparks(ball.x, TABLE_SURFACE_Y, ball.z, 0xffffff, 6, 1.0);
+
+      var isEdge = Math.abs(Math.abs(ball.x) - TABLE_WIDTH/2) < 0.03 || Math.abs(Math.abs(ball.z) - TABLE_LENGTH/2) < 0.03;
+      if(isEdge){
+        showBanner('🎯 EDGE BALL!', 'edge');
+        triggerScreenShake(0.15);
+      }
+
+      if(ball.z > 0){
+        ball.bouncesPlayer++;
+        if(ball.lastHitter === 'player' && ball.bouncesPlayer > 1){
+          endPoint('ai', 'Player Net / Serve Fault');
+          return;
+        }
+        if(ball.lastHitter === 'ai' && ball.bouncesPlayer > 1){
+          endPoint('ai', 'Player missed return');
+          return;
+        }
+      } else {
+        ball.bouncesAI++;
+        if(ball.lastHitter === 'ai' && ball.bouncesAI > 1){
+          endPoint('player', 'AI Net / Serve Fault');
+          return;
+        }
+        if(ball.lastHitter === 'player' && ball.bouncesAI > 1){
+          endPoint('player', 'AI missed return');
+          return;
+        }
+      }
+
+      if(ball.isServe){
+        if(ball.lastHitter === 'player' && ball.bouncesAI >= 1){
+          ball.isServe = false;
+        } else if(ball.lastHitter === 'ai' && ball.bouncesPlayer >= 1){
+          ball.isServe = false;
+        }
+      }
+    }
+  }
+
+  // Dead-ball check
+  var ballSpeed = Math.hypot(ball.vx, ball.vy, ball.vz);
+  if(ballSpeed < 0.28 && ball.y <= TABLE_SURFACE_Y + BALL_RADIUS + 0.04 && Math.abs(ball.z) < TABLE_LENGTH/2 + 0.1){
+    if(ball.lastHitter === 'ai'){
+      if(ball.bouncesPlayer === 0) endPoint('player', 'AI Net Fault');
+      else endPoint('ai', 'Dead ball');
+    } else if(ball.lastHitter === 'player'){
+      if(ball.bouncesAI === 0) endPoint('ai', 'Player Net Fault');
+      else endPoint('player', 'Dead ball');
+    }
+    return;
+  }
+
+  // Player Paddle Hit Detection
+  var pDistX = ball.x - playerPaddle.position.x;
+  var pDistY = ball.y - playerPaddle.position.y;
+  var pDistZ = ball.z - playerPaddle.position.z;
+  var dist3D = Math.hypot(pDistX, pDistY, pDistZ);
+
+  var effectivePlayerHitRadius = BASE_HIT_RADIUS * (0.85 + 0.3 * bat.control);
+
+  if(dist3D < effectivePlayerHitRadius && ball.vz > 0){
+    var swingSpeed = Math.hypot(playerPaddleVel.x, playerPaddleVel.y);
+    var isSmash = (ball.y > TABLE_SURFACE_Y + 0.16) && (swingSpeed > 1.2 || playerPaddleVel.y < -0.8);
+    if(isSmash) playerSmashesCount++;
+
+    var brushY = playerPaddleVel.y;
+    var brushX = playerPaddleVel.x;
+    ball.spinX = THREE.MathUtils.clamp(brushY * 10.0, -36, 42) * bat.spin;
+    ball.spinY = THREE.MathUtils.clamp(brushX * 9.0, -36, 36) * bat.spin;
+
+    var targetZ = isSmash ? -1.22 : (-0.55 - Math.random() * 0.55);
+    var aimOffset = (playerPaddle.position.x * 0.65) + (playerPaddleVel.x * 0.08);
+    var targetX = THREE.MathUtils.clamp(aimOffset * (1.1 / bat.control), -TABLE_WIDTH*0.44, TABLE_WIDTH*0.44);
+    
+    var flightTime = isSmash ? (0.21 / Math.min(1.45, bat.power)) : (0.36 / Math.min(1.45, bat.power));
+    var returnSol = solveTrajectory({ x: ball.x, y: ball.y, z: ball.z }, { x: targetX, y: TABLE_SURFACE_Y, z: targetZ }, flightTime, isSmash ? 0.04 : 0.10);
+
+    ball.vx = returnSol.vx;
+    ball.vy = returnSol.vy;
+    ball.vz = returnSol.vz;
+
+    ball.lastHitter = 'player';
+    ball.isServe = false;
+    ball.bouncesAI = 0;
+    ball.bouncesPlayer = 0;
+
+    currentRallyCount++;
+    updateHUD();
+
+    var isHeavySpin = Math.hypot(ball.spinX, ball.spinY) > 10;
+    AudioSys.hitPaddle(isSmash, isHeavySpin);
+    spawnSparks(ball.x, ball.y, ball.z, bat.color, isSmash ? 26 : 10, bat.power);
+
+    if(isSmash){
+      showBanner('🔥 ULTRA SMASH!', 'smash');
+      triggerScreenShake(0.22);
+      slowMoTime = 0.25;
+    } else if(ball.spinX > 14){
+      showBanner('⚡ TOPSPIN LOOP', 'spin');
+    } else if(ball.spinX < -10){
+      showBanner('✂️ BACKSPIN CHOP', 'spin');
+    } else if(Math.abs(ball.spinY) > 10){
+      showBanner('🌀 CURVE SLICE', 'spin');
+    }
+  }
+
+  // AI Paddle Hit Detection
+  var aiDistX = ball.x - aiPaddle.position.x;
+  var aiDistY = ball.y - aiPaddle.position.y;
+  var aiDistZ = ball.z - aiPaddle.position.z;
+  var aiDist3D = Math.hypot(aiDistX, aiDistY, aiDistZ);
+
+  if(aiDist3D < BASE_HIT_RADIUS && ball.vz < 0){
+    var aiSmash = (Math.random() < lvl.smashChance) && (ball.y > TABLE_SURFACE_Y + 0.22);
+    var aiTargetZ = aiSmash ? 1.25 : (1.00 + Math.random() * 0.25);
+    var aiTargetX = THREE.MathUtils.clamp((Math.random() - 0.5) * (TABLE_WIDTH * 0.8), -TABLE_WIDTH*0.42, TABLE_WIDTH*0.42);
+    var aiFlightTime = aiSmash ? (0.25 / lvl.aiPower) : (0.38 / lvl.aiPower);
+
+    var aiSol = solveTrajectory({ x: ball.x, y: ball.y, z: ball.z }, { x: aiTargetX, y: TABLE_SURFACE_Y, z: aiTargetZ }, aiFlightTime, aiSmash ? 0.04 : 0.10);
+
+    ball.vx = aiSol.vx;
+    ball.vy = aiSol.vy;
+    ball.vz = aiSol.vz;
+    ball.spinX = -(6 + Math.random() * 10) * lvl.spinSkill;
+    ball.spinY = (Math.random() - 0.5) * 12 * lvl.spinSkill;
+
+    ball.lastHitter = 'ai';
+    ball.isServe = false;
+    ball.bouncesPlayer = 0;
+    ball.bouncesAI = 0;
+
+    currentRallyCount++;
+    updateHUD();
+
+    AudioSys.hitPaddle(aiSmash, true);
+    spawnSparks(ball.x, ball.y, ball.z, lvl.color, aiSmash ? 18 : 8, lvl.aiPower);
+    if(aiSmash){
+      showBanner(lvl.name.split(' ')[0].toUpperCase() + ' SMASH!', 'smash');
+      triggerScreenShake(0.18);
+    }
+  }
+
+  // Out of bounds
+  if(ball.y < 0.15 || Math.abs(ball.z) > TABLE_LENGTH + 1.2 || Math.abs(ball.x) > TABLE_WIDTH + 1.2){
+    if(ball.lastHitter === 'player'){
+      if(ball.bouncesAI >= 1) endPoint('player', 'Point Player');
+      else endPoint('ai', 'Player shot out');
+    } else if(ball.lastHitter === 'ai'){
+      if(ball.bouncesPlayer >= 1) endPoint('ai', 'Point AI');
+      else endPoint('player', 'AI shot out');
+    } else {
+      endPoint(currentServer === 'player' ? 'ai' : 'player', 'Fault');
+    }
+  }
+}
+
+/* =====================================================================
+   DASHBOARD SCREENS
+   ===================================================================== */
+function renderDashboardContent(){
+  var container = document.getElementById('dashContent');
+  var html = '';
+
+  if(currentDashboardTab === 'levels'){
+    var totalStars = Object.values(progress.levelStars).reduce(function(a,b){ return a+b; }, 0);
+    html += '<div style="display:flex; justify-content:space-between; align-items:center;">';
+    html += '<div style="font-size:11px; color:var(--ink-dim);">CHALLENGE WORLD TOUR OPPONENTS</div>';
+    html += '<div style="font-family:\'Orbitron\'; font-size:10px; color:var(--gold);">★ STARS: ' + totalStars + ' / 36</div>';
+    html += '</div>';
+
+    var scout = LEVELS[progress.selectedLevel];
+    html += '<div id="scoutPanel">';
+    html += '<div class="scout-avatar" style="border-color:#' + scout.color.toString(16).padStart(6,'0') + '">' + scout.avatar + '</div>';
+    html += '<div class="scout-info">';
+    html += '<div class="scout-name">' + scout.country + ' · ' + scout.name + '</div>';
+    html += '<div class="scout-title">' + scout.circuit + ' — ' + scout.title + '</div>';
+    html += '<div class="scout-quote">"' + scout.quote + '"</div>';
+    html += '</div>';
+    html += '<div class="scout-stats">';
+    html += '<div class="stat-row"><span class="stat-label">SPD</span><div class="stat-bar"><div class="stat-fill" style="width:' + (scout.aiSpeed/6.2*100) + '%; background:#00d2ff;"></div></div></div>';
+    html += '<div class="stat-row"><span class="stat-label">PWR</span><div class="stat-bar"><div class="stat-fill" style="width:' + (scout.aiPower/1.4*100) + '%; background:#ff6426;"></div></div></div>';
+    html += '<div class="stat-row"><span class="stat-label">SPN</span><div class="stat-bar"><div class="stat-fill" style="width:' + (scout.spinSkill/2.0*100) + '%; background:#a855f7;"></div></div></div>';
+    html += '</div>';
+    html += '</div>';
+
+    var circuits = ['Circuit 1 · Junior Open', 'Circuit 2 · National Pro', 'Circuit 3 · Continental Cup', 'Circuit 4 · Grand Slam Finals'];
+    for(var c=0; c<circuits.length; c++){
+      html += '<div class="circuit-banner"><span>' + circuits[c].toUpperCase() + '</span></div>';
+      html += '<div class="grid-levels">';
+      for(var i=c*3; i<c*3+3; i++){
+        var lvl = LEVELS[i];
+        var unlocked = progress.unlockedLevels[i];
+        var sel = (progress.selectedLevel === i);
+        var stars = progress.levelStars[i] || 0;
+        var starStr = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+
+        html += '<div class="level-card ' + (sel ? 'selected ' : '') + (!unlocked ? 'locked' : '') + '" onclick="window.onSelectLevel(' + i + ')">';
+        html += '<div class="card-flag">' + lvl.country.split(' ')[0] + '</div>';
+        html += '<div style="font-size:11px; font-weight:800; color:var(--ink);">' + (i+1) + '. ' + lvl.name.split(' ')[0] + '</div>';
+        html += '<div class="card-stars">' + (unlocked ? starStr : 'LOCKED') + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+  } else if(currentDashboardTab === 'modes'){
+    html += '<div style="font-size:11px; color:var(--ink-dim); margin-bottom:4px;">SELECT GAME MODE</div>';
+    html += '<div class="grid-modes">';
+    
+    var tourSel = progress.gameMode === 'tour';
+    html += '<div class="dash-card ' + (tourSel ? 'selected' : '') + '" onclick="window.onSelectMode(\'tour\')">';
+    html += '<div style="font-size:22px;">🏆</div>';
+    html += '<div style="font-size:13px; font-weight:800; color:var(--ink);">WORLD CIRCUIT TOUR</div>';
+    html += '<div style="font-size:8.5px; color:var(--ink-dim); margin-top:2px;">12 International rivals with unique AI personalities.</div>';
+    html += '</div>';
+
+    var endSel = progress.gameMode === 'endless';
+    html += '<div class="dash-card ' + (endSel ? 'selected' : '') + '" onclick="window.onSelectMode(\'endless\')">';
+    html += '<div style="font-size:22px;">♾️</div>';
+    html += '<div style="font-size:13px; font-weight:800; color:var(--ink);">ENDLESS RALLY</div>';
+    html += '<div style="font-size:8.5px; color:var(--ink-dim); margin-top:2px;">Survival high-score rally challenge (Best: ' + progress.endlessHighScore + ').</div>';
+    html += '</div>';
+
+    html += '</div>';
+  } else if(currentDashboardTab === 'blades'){
+    html += '<div style="font-size:11px; color:var(--ink-dim); margin-bottom:4px;">LOCKER ROOM BLADES</div>';
+    html += '<div class="grid-blades">';
+    for(var b=0; b<BATS.length; b++){
+      var bat = BATS[b];
+      var bUnlocked = progress.unlockedBats[b];
+      var bSel = (progress.selectedBat === b);
+      html += '<div class="dash-card ' + (bSel ? 'selected ' : '') + (!bUnlocked ? 'locked' : '') + '" onclick="window.onSelectBat(' + b + ')">';
+      html += '<div class="card-blade-swatch" style="background:#' + bat.color.toString(16).padStart(6,'0') + '"></div>';
+      html += '<div style="font-size:11px; font-weight:800; color:var(--ink);">' + bat.name + '</div>';
+      html += '<div class="stat-row"><span class="stat-label">PWR</span><div class="stat-bar"><div class="stat-fill" style="width:' + (bat.power/1.7*100) + '%"></div></div></div>';
+      html += '<div class="stat-row"><span class="stat-label">SPN</span><div class="stat-bar"><div class="stat-fill" style="width:' + (bat.spin/1.9*100) + '%"></div></div></div>';
+      html += '<div class="stat-row"><span class="stat-label">CTL</span><div class="stat-bar"><div class="stat-fill" style="width:' + (bat.control/1.6*100) + '%"></div></div></div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  } else if(currentDashboardTab === 'arenas'){
+    html += '<div style="font-size:11px; color:var(--ink-dim); margin-bottom:4px;">WORLD TOUR HOST CITIES</div>';
+    html += '<div class="grid-modes">';
+    for(var a=0; a<ARENAS.length; a++){
+      var ar = ARENAS[a];
+      var aSel = (progress.selectedArena === a);
+      html += '<div class="dash-card ' + (aSel ? 'selected' : '') + '" onclick="window.onSelectArena(' + a + ')">';
+      html += '<div style="font-size:12px; font-weight:800; color:var(--ink);">' + ar.name + '</div>';
+      html += '<div style="font-size:8px; color:var(--ink-dim); margin-top:2px;">' + ar.desc + '</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+document.querySelectorAll('#dashNav .dash-tab').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('#dashNav .dash-tab').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentDashboardTab = btn.dataset.view;
+    renderDashboardContent();
+  });
+});
+
+function showMainMenu(){
+  gameState = STATE.MENU;
+  matchStarted = false;
+  isPaused = false;
+  document.getElementById('quickServeDock').classList.add('hidden');
+  aimTargetMesh.visible = false;
+  trajLine.visible = false;
+  document.getElementById('dashCloseBtn').style.display = 'none';
+  document.getElementById('dashStartBtn').innerText = 'CHALLENGE STAGE';
+  document.getElementById('overlay').classList.remove('hidden');
+  renderDashboardContent();
+  updateHUD();
+}
+
+function showPauseMenu(){
+  if(!matchStarted || gameState === STATE.MATCH_OVER) {
+    showMainMenu();
+    return;
+  }
+  isPaused = true;
+  savedStateBeforePause = gameState;
+  document.getElementById('quickServeDock').classList.add('hidden');
+  aimTargetMesh.visible = false;
+  trajLine.visible = false;
+  document.getElementById('dashCloseBtn').style.display = 'inline-block';
+  document.getElementById('dashStartBtn').innerText = 'RESTART MATCH';
+  document.getElementById('overlay').classList.remove('hidden');
+  renderDashboardContent();
+  updateHUD();
+}
+
+function showMatchEndOverlay(playerWon, newLvl, newBat){
+  matchStarted = false;
+  isPaused = false;
+  document.getElementById('overlay').classList.remove('hidden');
+  document.getElementById('dashCloseBtn').style.display = 'none';
+  document.getElementById('dashStartBtn').innerText = 'CONTINUE TOUR';
+  currentDashboardTab = 'levels';
+  document.querySelectorAll('#dashNav .dash-tab').forEach(function(b){ b.classList.remove('active'); });
+  document.querySelector('#dashNav .dash-tab[data-view="levels"]').classList.add('active');
+  renderDashboardContent();
+  
+  showBanner(playerWon ? '★ VICTORY! ★' : 'STAGE DEFEAT');
+}
+
+window.onSelectMode = function(mode){
+  progress.gameMode = mode;
+  saveProgress();
+  renderDashboardContent();
+  updateHUD();
+};
+
+window.onSelectLevel = function(idx){
+  if(!progress.unlockedLevels[idx]) return;
+  progress.selectedLevel = idx;
+  saveProgress();
+  updateOpponentPaddle();
+  renderDashboardContent();
+  updateHUD();
+};
+
+window.onSelectArena = function(idx){
+  progress.selectedArena = idx;
+  saveProgress();
+  updateArenaTheme();
+  renderDashboardContent();
+  updateHUD();
+};
+
+window.onSelectBat = function(idx){
+  if(!progress.unlockedBats[idx]) return;
+  progress.selectedBat = idx;
+  saveProgress();
+  updatePlayerPaddleBat();
+  renderDashboardContent();
+  updateHUD();
+};
+
+window.onStartGame = function(){
+  AudioSys.init();
+  startMatch(progress.selectedLevel);
+};
+
+window.onCloseDash = function(){
+  if(matchStarted && isPaused){
+    isPaused = false;
+    gameState = savedStateBeforePause;
+    document.getElementById('overlay').classList.add('hidden');
+    
+    if(gameState === STATE.SERVE_WAIT && currentServer === 'player'){
+      document.getElementById('quickServeDock').classList.remove('hidden');
+      updateAimTargetVisual();
+    }
+  } else if(!matchStarted){
+    startMatch(progress.selectedLevel);
+  }
+};
+
+document.getElementById('menuBtn').addEventListener('click', function(){
+  if(matchStarted && !isPaused) showPauseMenu();
+  else if(matchStarted && isPaused) window.onCloseDash();
+  else showMainMenu();
+});
+
+document.getElementById('soundBtn').addEventListener('click', function(){
+  progress.soundEnabled = !progress.soundEnabled;
+  this.innerText = progress.soundEnabled ? '🔊' : '🔇';
+  saveProgress();
+});
+
+document.getElementById('camBtn').addEventListener('click', function(){
+  progress.cameraMode = (progress.cameraMode + 1) % 4;
+  var camNames = ['Broadcast', 'Action Follow', 'First-Person POV', 'Drone Orbit'];
+  showBanner('CAMERA: ' + camNames[progress.cameraMode]);
+  saveProgress();
+});
+
+/* =====================================================================
+   MAIN LOOP & WIDE-ANGLE AUTO-FRAMING CAMERA ENGINE
+   ===================================================================== */
+var clock = new THREE.Clock();
+var beaconEl = document.getElementById('sideBallBeacon');
+var tempVec = new THREE.Vector3();
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  var dt = clock.getDelta();
+  if(!isPaused){
+    updatePhysics(dt);
+  }
+
+  // Dynamic Camera Lighting Flashes
+  crowdFlashTimer += dt;
+  if(crowdFlashTimer > 0.8 && Math.random() < 0.08){
+    crowdFlashLight.position.set((Math.random() - 0.5) * 12, 2.5 + Math.random() * 2.0, -6.5 - Math.random() * 2);
+    crowdFlashLight.intensity = 2.5;
+    crowdFlashTimer = 0;
+  } else {
+    crowdFlashLight.intensity *= 0.85;
+  }
+
+  // WIDE-ANGLE DYNAMIC BALL TRACKING CAMERA (NEVER CUTS OFF SIDE BALLS)
+  var targetCamX = 0;
+  var targetCamY = TABLE_SURFACE_Y + 0.76;
+  var targetCamZ = PLAYER_Z + 1.15;
+  var targetLookX = 0;
+  var targetLookY = TABLE_SURFACE_Y + 0.12;
+  var targetLookZ = AI_Z * 0.30;
+
+  if(progress.cameraMode === 0){ // Broadcast Pro (Auto-pans on wide balls)
+    var lateralShift = ball.inPlay ? (ball.x * 0.42) : (playerPaddle.position.x * 0.28);
+    targetCamX = lateralShift;
+    targetLookX = ball.inPlay ? (ball.x * 0.38) : 0;
+    targetCamY = TABLE_SURFACE_Y + 0.78 + (Math.abs(ball.x) > 0.4 ? 0.12 : 0); // Elevates on wide angles
+  } else if(progress.cameraMode === 1){ // Action Follow
+    targetCamX = ball.inPlay ? (ball.x * 0.50 + playerPaddle.position.x * 0.30) : (playerPaddle.position.x * 0.55);
+    targetLookX = ball.inPlay ? (ball.x * 0.45) : 0;
+    targetCamY = TABLE_SURFACE_Y + 0.62;
+    targetCamZ = PLAYER_Z + 0.90;
+  } else if(progress.cameraMode === 2){ // First-Person POV
+    targetCamX = playerPaddle.position.x * 0.85;
+    targetCamY = playerPaddle.position.y + 0.14;
+    targetCamZ = playerPaddle.position.z + 0.35;
+    targetLookX = ball.x * 0.25;
+    targetLookZ = -1.2;
+  } else if(progress.cameraMode === 3){ // Drone Orbit
+    var time = Date.now() * 0.0004;
+    targetCamX = Math.sin(time) * 2.8;
+    targetCamY = TABLE_SURFACE_Y + 1.4;
+    targetCamZ = Math.cos(time) * 2.6;
+    targetLookX = 0;
+    targetLookY = TABLE_SURFACE_Y;
+    targetLookZ = 0;
+  }
+
+  // Smooth Screen-Shake & Camera Interpolation
+  if(!isPaused && screenShakeTime > 0){
+    screenShakeTime -= dt;
+    camera.position.x = targetCamX + (Math.random() - 0.5) * 0.04;
+    camera.position.y = targetCamY + (Math.random() - 0.5) * 0.04;
+    camera.position.z = targetCamZ;
+  } else {
+    camera.position.x += (targetCamX - camera.position.x) * 0.14;
+    camera.position.y += (targetCamY - camera.position.y) * 0.14;
+    camera.position.z += (targetCamZ - camera.position.z) * 0.14;
+  }
+
+  currentCamLookAt.x += (targetLookX - currentCamLookAt.x) * 0.14;
+  currentCamLookAt.y += (targetLookY - currentCamLookAt.y) * 0.14;
+  currentCamLookAt.z += (targetLookZ - currentCamLookAt.z) * 0.14;
+  camera.lookAt(currentCamLookAt);
+
+  // PERIPHERAL SIDE-BALL BEACON RADAR
+  if(ball.inPlay && !isPaused){
+    tempVec.set(ball.x, ball.y, ball.z);
+    tempVec.project(camera);
+    var screenX = (tempVec.x * 0.5 + 0.5) * window.innerWidth;
+    var screenY = (-(tempVec.y * 0.5) + 0.5) * window.innerHeight;
+    var isEdge = screenX < 40 || screenX > window.innerWidth - 40;
+
+    if(isEdge){
+      beaconEl.style.display = 'block';
+      beaconEl.style.left = THREE.MathUtils.clamp(screenX, 24, window.innerWidth - 24) + 'px';
+      beaconEl.style.top = THREE.MathUtils.clamp(screenY, 30, window.innerHeight - 30) + 'px';
+    } else {
+      beaconEl.style.display = 'none';
+    }
+  } else {
+    beaconEl.style.display = 'none';
+  }
+
+  // Particles
+  if(!isPaused){
+    for(var i=0; i<particles.length; i++){
+      var p = particles[i];
+      if(p.life > 0){
+        p.life -= dt;
+        p.mesh.position.x += p.vx * dt;
+        p.mesh.position.y += p.vy * dt;
+        p.mesh.position.z += p.vz * dt;
+        p.vy += GRAVITY * 0.4 * dt;
+        p.mesh.material.opacity = Math.max(0, p.life / p.maxLife);
+        if(p.life <= 0) p.mesh.visible = false;
+      }
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+
+// Initial Boot
+updatePlayerPaddleBat();
+updateOpponentPaddle();
+updateArenaTheme();
+document.getElementById('soundBtn').innerText = progress.soundEnabled ? '🔊' : '🔇';
+updateHUD();
+showMainMenu();
+animate();
+
+})();
+</script>
+</body>
+</html>
